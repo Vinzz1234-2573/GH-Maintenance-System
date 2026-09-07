@@ -48,8 +48,8 @@ export default function LoginForm({ role, dashboardHref, title }) {
         </div>
         <form onSubmit={handleSubmit}>
           <div className="field" style={{ marginBottom: 12 }}>
-            <label>Your Name</label>
-            <input type="text" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Pavi" />
+            <label>Username</label>
+            <input type="text" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Username" />
           </div>
           {error && <div className="error-text" style={{ marginBottom: 10 }}>{error}</div>}
           <button className="btn btn-primary btn-block" disabled={loading || !name.trim()}>
