@@ -114,7 +114,8 @@ button { font-family: inherit; }
 .badge-pending { background: var(--info-bg); color: var(--muted); }
 .badge-completed { background: var(--success-bg); color: var(--success); }
 .badge-inprogress { background: var(--warning-bg); color: var(--warning); }
-.badge-overdue { background: var(--warning-bg); color: var(--warning); }
+.badge-overdue { background: var(--danger-bg); color: var(--danger); }
+.badge-disabled { background: #eef1f4; color: var(--muted); }
 .badge-priority-low { background: var(--info-bg); color: var(--muted); }
 .badge-priority-normal { background: var(--primary-light); color: var(--primary); }
 .badge-priority-high { background: var(--warning-bg); color: var(--warning); }

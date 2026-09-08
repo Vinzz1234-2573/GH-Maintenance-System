@@ -26,7 +26,7 @@ export default function AddNewTaskPage() {
     const { error } = await addTask(values);
     if (error) throw new Error(error.message);
     showToast("Maintenance task created successfully.");
-    router.push("/manager/tasks");
+    router.push("/manager");
   }
 
   return (

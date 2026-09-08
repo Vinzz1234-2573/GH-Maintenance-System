@@ -2,14 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { fetchTasks, fetchEquipment, fetchStaffUsers, updateTask, deleteTask, effectiveStatus, STATUSES } from "../../../lib/data";
+import { fetchTasks, fetchEquipment, fetchStaffUsers, updateTask, setTaskEnabled, deleteTask } from "../../../lib/data";
 import { useToast } from "../../../components/useToast";
-import { StatusBadge } from "../../../components/Badges";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 import TaskForm from "../../../components/TaskForm";
-import { formatDate } from "../../../lib/dates";
+import { FREQUENCIES, scheduleSummary } from "../../../lib/schedule";
 
-const EMPTY_FILTERS = { status: "all", assignedTo: "all", equipmentId: "all" };
+const EMPTY_FILTERS = { status: "all", assignedTo: "all", equipmentId: "all", frequency: "all" };
 
 export default function MaintenanceTasksPage() {
   const { showToast, ToastHost } = useToast();
@@ -44,9 +43,10 @@ export default function MaintenanceTasksPage() {
   }, [staff]);
 
   const filtered = tasks.filter((t) => {
-    if (filters.status !== "all" && effectiveStatus(t) !== filters.status) return false;
+    if (filters.status !== "all" && (filters.status === "enabled") !== t.enabled) return false;
     if (filters.assignedTo !== "all" && t.assigned_to !== filters.assignedTo) return false;
     if (filters.equipmentId !== "all" && t.equipment_id !== filters.equipmentId) return false;
+    if (filters.frequency !== "all" && t.frequency !== filters.frequency) return false;
     return true;
   });
   const hasFilters = JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS);
@@ -56,6 +56,13 @@ export default function MaintenanceTasksPage() {
     if (error) throw new Error(error.message);
     showToast("Maintenance task updated successfully.");
     setEditing(null);
+    load();
+  }
+
+  async function toggleEnabled(task) {
+    const { error } = await setTaskEnabled(task.id, !task.enabled);
+    if (error) return showToast(error.message);
+    showToast(task.enabled ? "Task disabled — it will stop appearing for staff." : "Task enabled.");
     load();
   }
 
@@ -83,7 +90,15 @@ export default function MaintenanceTasksPage() {
             <label>Status</label>
             <select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
               <option value="all">All</option>
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              <option value="enabled">Enabled</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Frequency</label>
+            <select value={filters.frequency} onChange={(e) => setFilters((f) => ({ ...f, frequency: e.target.value }))}>
+              <option value="all">All</option>
+              {FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
           </div>
           <div className="field">
@@ -110,12 +125,8 @@ export default function MaintenanceTasksPage() {
         <div className="loading">Loading tasks...</div>
       ) : tasks.length === 0 ? (
         <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
-            No maintenance tasks have been created yet.
-          </div>
-          <div className="note" style={{ margin: "0 0 18px" }}>
-            Create the first task to get your maintenance checklist started.
-          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>No maintenance tasks have been created yet.</div>
+          <div className="note" style={{ margin: "0 0 18px" }}>Create the first task to get your maintenance checklist started.</div>
           <Link href="/manager/tasks/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
             + Add New Maintenance Task
           </Link>
@@ -123,22 +134,33 @@ export default function MaintenanceTasksPage() {
       ) : (
         <div className="data-table-wrap">
           <table className="data-table">
-            <thead><tr><th>Equipment</th><th>Task</th><th>Assigned Staff</th><th>Status</th><th>Due Date</th><th>Actions</th></tr></thead>
+            <thead>
+              <tr><th>Task</th><th>Equipment</th><th>Frequency</th><th>Assigned Staff</th><th>Status</th><th>Actions</th></tr>
+            </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={6}><div className="empty">No tasks match these filters.</div></td></tr>
               ) : (
                 filtered.map((t) => (
                   <tr key={t.id}>
-                    <td data-label="Equipment">{equipmentById[t.equipment_id]?.equipment_name || "—"}{t.is_daily && <span className="note"> · Daily</span>}</td>
-                    <td data-label="Task">{t.task_name}</td>
+                    <td data-label="Task"><b>{t.task_name}</b></td>
+                    <td data-label="Equipment">{equipmentById[t.equipment_id]?.equipment_name || "—"}</td>
+                    <td data-label="Frequency">{scheduleSummary(t)}</td>
                     <td data-label="Assigned Staff">{staffById[t.assigned_to]?.name || "Unassigned"}</td>
-                    <td data-label="Status"><StatusBadge status={effectiveStatus(t)} /></td>
-                    <td data-label="Due Date">{t.date ? formatDate(t.date) : "—"}</td>
+                    <td data-label="Status">
+                      <span className={"badge " + (t.enabled ? "badge-completed" : "badge-disabled")}>
+                        {t.enabled ? "Enabled" : "Disabled"}
+                      </span>
+                    </td>
                     <td data-label="Actions">
                       <div className="table-actions">
                         <button className="btn btn-ghost btn-sm" onClick={() => setEditing(t)}>Edit</button>
-                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--danger)" }} onClick={() => setDeleteTarget(t)}>Delete</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => toggleEnabled(t)}>
+                          {t.enabled ? "Disable" : "Enable"}
+                        </button>
+                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--danger)" }} onClick={() => setDeleteTarget(t)}>
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -168,7 +190,7 @@ export default function MaintenanceTasksPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         title="Delete task?"
-        message={`Are you sure you want to delete "${deleteTarget?.task_name}"?`}
+        message={`Are you sure you want to delete "${deleteTarget?.task_name}"? This also removes its scheduled occurrences. There's no undo — use Disable instead if you might need it again.`}
         confirmLabel="Delete"
         danger
         onConfirm={confirmDelete}

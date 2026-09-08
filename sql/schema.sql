@@ -2,17 +2,28 @@
 -- Run this in the Supabase SQL Editor (Project -> SQL Editor -> New query).
 -- Safe to re-run: every create/insert is idempotent.
 --
--- This is intentionally a simple 3-table schema with a simple name-based
--- login (no passwords yet) — see the app's lib/session.js and
--- app/login/**/page.js for how that's structured to be swapped for real
--- Supabase Auth later without changing the table shapes.
+-- Two-table model for tasks:
+--   maintenance_tasks  — the recurring SCHEDULE a manager defines once
+--                        (equipment, description, who it's assigned to,
+--                        frequency, enabled/disabled).
+--   task_occurrences   — one row per calendar date a task is actually due.
+--                        The app generates these lazily (see lib/data.js
+--                        ensureOccurrences) whenever a dashboard is opened
+--                        for a date range — there is no server/cron here,
+--                        so "the next occurrence appears automatically"
+--                        means "the next time anyone opens a dashboard on
+--                        or after that date", which in practice is every
+--                        shift. This keeps the system serverless and the
+--                        schema simple, at the cost of no background job.
 --
--- If you're upgrading from an older version of this app that used
--- tasks / task_entries / checklist_submissions, those are unrelated to
--- this schema and safe to drop once you've exported anything you need:
---   drop table if exists task_entries;
---   drop table if exists checklist_submissions;
---   drop table if exists tasks;
+-- If you're upgrading from an earlier version of this app that used a
+-- single maintenance_tasks row per task (status/date/is_daily columns),
+-- that shape is superseded by the two-table model below. Since no
+-- production data existed yet under that shape, this script does not
+-- attempt to migrate it — drop it and start fresh if you already ran an
+-- older version of this file:
+--   drop table if exists task_occurrences;
+--   drop table if exists maintenance_tasks;
 
 create extension if not exists pgcrypto;
 
@@ -34,28 +45,43 @@ create table if not exists equipment (
   created_at timestamptz not null default now()
 );
 
+-- The recurring schedule — what to check, on what equipment, assigned to
+-- whom, and how often. Manager-only to create/edit/enable/disable.
 create table if not exists maintenance_tasks (
   id uuid primary key default gen_random_uuid(),
   equipment_id uuid references equipment (id) on delete set null,
   task_name text not null,
   description text,
   assigned_to uuid references users (id) on delete set null,
-  status text not null default 'Pending' check (status in ('Pending', 'In Progress', 'Completed')),
-  date date,
-  remarks text,
-  -- Daily checklist items (e.g. the preset equipment checks below) are
-  -- marked is_daily = true: the app treats them as due again every day
-  -- regardless of yesterday's status (see lib/data.js effectiveStatus).
-  -- One-off tasks a manager creates for a specific repair stay false and
-  -- keep whatever status they're given, with no daily reset.
-  is_daily boolean not null default false,
-  created_at timestamptz not null default now()
+  frequency text not null default 'once' check (frequency in ('once', 'daily', 'weekly', 'monthly')),
+  weekly_days int[] not null default '{}',   -- ISO weekday numbers, Mon=1..Sun=7 (frequency = 'weekly')
+  monthly_day int,                            -- day of month, 1-31, clamped to month length (frequency = 'monthly')
+  start_date date not null default current_date, -- also the single due date when frequency = 'once'
+  enabled boolean not null default true,      -- manager enable/disable — disabled tasks stop generating occurrences
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
-alter table maintenance_tasks add column if not exists is_daily boolean not null default false;
 
 create index if not exists maintenance_tasks_assigned_to_idx on maintenance_tasks (assigned_to);
 create index if not exists maintenance_tasks_equipment_idx on maintenance_tasks (equipment_id);
-create index if not exists maintenance_tasks_status_idx on maintenance_tasks (status);
+create index if not exists maintenance_tasks_enabled_idx on maintenance_tasks (enabled);
+
+-- One row per calendar date a task is due. This is what staff actually
+-- see and check off; maintenance_tasks above never gets a "status".
+create table if not exists task_occurrences (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references maintenance_tasks (id) on delete cascade,
+  due_date date not null,
+  status text not null default 'Pending' check (status in ('Pending', 'In Progress', 'Completed')),
+  remarks text,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (task_id, due_date)
+);
+
+create index if not exists task_occurrences_due_date_idx on task_occurrences (due_date);
+create index if not exists task_occurrences_task_idx on task_occurrences (task_id);
+create index if not exists task_occurrences_status_idx on task_occurrences (status);
 
 -- ---------------------------------------------------------------------
 -- Row Level Security
@@ -70,6 +96,7 @@ create index if not exists maintenance_tasks_status_idx on maintenance_tasks (st
 alter table users enable row level security;
 alter table equipment enable row level security;
 alter table maintenance_tasks enable row level security;
+alter table task_occurrences enable row level security;
 
 drop policy if exists "anon full access" on users;
 create policy "anon full access" on users for all using (true) with check (true);
@@ -79,6 +106,9 @@ create policy "anon full access" on equipment for all using (true) with check (t
 
 drop policy if exists "anon full access" on maintenance_tasks;
 create policy "anon full access" on maintenance_tasks for all using (true) with check (true);
+
+drop policy if exists "anon full access" on task_occurrences;
+create policy "anon full access" on task_occurrences for all using (true) with check (true);
 
 -- ---------------------------------------------------------------------
 -- Sample users — safe to re-run (only inserts if not already present)
@@ -95,10 +125,11 @@ select 'Ali', 'staff' where not exists (select 1 from users where name = 'Ali');
 
 -- ---------------------------------------------------------------------
 -- Preset daily checklist — the 8 items from "Daily Equipment
--- Maintenance Record", pre-loaded so the Manager never has to create
--- these by hand. Each is marked is_daily = true, split alternately
--- between the two sample staff — reassign them to real staff any time
--- from Task Management -> Edit.
+-- Maintenance Record", pre-loaded as daily-recurring tasks so the
+-- Manager never has to create them by hand. Split alternately between
+-- the two sample staff — reassign to real staff any time from
+-- Maintenance Tasks -> Edit. Today's occurrence is seeded directly so
+-- the checklist shows up immediately even before the app has run once.
 -- ---------------------------------------------------------------------
 
 insert into equipment (equipment_name)
@@ -118,42 +149,56 @@ select 'Flooring & Ceiling' where not exists (select 1 from equipment where equi
 insert into equipment (equipment_name)
 select 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)' where not exists (select 1 from equipment where equipment_name = 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
-select e.id, 'Toilet Fixtures', 'Flush, water leakage, tap, toilet seat, basin, exhaust fan', u.id, 'Pending', true
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, frequency)
+select e.id, 'Toilet Fixtures', 'Flush, water leakage, tap, toilet seat, basin, exhaust fan', u.id, 'daily'
 from equipment e, users u where e.equipment_name = 'Toilet Fixtures' and u.name = 'John'
 and not exists (select 1 from maintenance_tasks where task_name = 'Toilet Fixtures');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
-select e.id, 'Air-condition & Fan', 'Operation, noise, vibration, compressor', u.id, 'Pending', true
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, frequency)
+select e.id, 'Air-condition & Fan', 'Operation, noise, vibration, compressor', u.id, 'daily'
 from equipment e, users u where e.equipment_name = 'Air-condition & Fan' and u.name = 'Ali'
 and not exists (select 1 from maintenance_tasks where task_name = 'Air-condition & Fan');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
-select e.id, 'Water Pump', 'Pressure, leakage, noise, vibration, motor condition', u.id, 'Pending', true
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, frequency)
+select e.id, 'Water Pump', 'Pressure, leakage, noise, vibration, motor condition', u.id, 'daily'
 from equipment e, users u where e.equipment_name = 'Water Pump' and u.name = 'John'
 and not exists (select 1 from maintenance_tasks where task_name = 'Water Pump');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
-select e.id, 'Kitchen & Drainage', 'Pump operation, water level, leakage, alarm, water flow, blockage, smell', u.id, 'Pending', true
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, frequency)
+select e.id, 'Kitchen & Drainage', 'Pump operation, water level, leakage, alarm, water flow, blockage, smell', u.id, 'daily'
 from equipment e, users u where e.equipment_name = 'Kitchen & Drainage' and u.name = 'Ali'
 and not exists (select 1 from maintenance_tasks where task_name = 'Kitchen & Drainage');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
-select e.id, 'Lift & Cargo Lift', 'Operation, noise, vibration, compressor', u.id, 'Pending', true
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, frequency)
+select e.id, 'Lift & Cargo Lift', 'Operation, noise, vibration, compressor', u.id, 'daily'
 from equipment e, users u where e.equipment_name = 'Lift & Cargo Lift' and u.name = 'John'
 and not exists (select 1 from maintenance_tasks where task_name = 'Lift & Cargo Lift');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
-select e.id, 'Lighting', 'Bulbs lighting', u.id, 'Pending', true
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, frequency)
+select e.id, 'Lighting', 'Bulbs lighting', u.id, 'daily'
 from equipment e, users u where e.equipment_name = 'Lighting' and u.name = 'Ali'
 and not exists (select 1 from maintenance_tasks where task_name = 'Lighting');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
-select e.id, 'Flooring & Ceiling', 'Broken / damaged sections', u.id, 'Pending', true
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, frequency)
+select e.id, 'Flooring & Ceiling', 'Broken / damaged sections', u.id, 'daily'
 from equipment e, users u where e.equipment_name = 'Flooring & Ceiling' and u.name = 'John'
 and not exists (select 1 from maintenance_tasks where task_name = 'Flooring & Ceiling');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
-select e.id, 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)', 'Chairs, tables, beds, windows, cabinets', u.id, 'Pending', true
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, frequency)
+select e.id, 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)', 'Chairs, tables, beds, windows, cabinets', u.id, 'daily'
 from equipment e, users u where e.equipment_name = 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)' and u.name = 'Ali'
 and not exists (select 1 from maintenance_tasks where task_name = 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)');
+
+-- Seed today's occurrence for every preset task so the checklist isn't
+-- empty even before the app has generated anything itself.
+insert into task_occurrences (task_id, due_date)
+select t.id, current_date
+from maintenance_tasks t
+where t.task_name in (
+  'Toilet Fixtures', 'Air-condition & Fan', 'Water Pump', 'Kitchen & Drainage',
+  'Lift & Cargo Lift', 'Lighting', 'Flooring & Ceiling',
+  'Equipment (Chairs, Tables, Beds, Windows, Cabinets)'
+)
+and not exists (
+  select 1 from task_occurrences o where o.task_id = t.id and o.due_date = current_date
+);
