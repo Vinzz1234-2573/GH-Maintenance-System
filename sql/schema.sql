@@ -16,14 +16,12 @@
 --                        shift. This keeps the system serverless and the
 --                        schema simple, at the cost of no background job.
 --
--- If you're upgrading from an earlier version of this app that used a
--- single maintenance_tasks row per task (status/date/is_daily columns),
--- that shape is superseded by the two-table model below. Since no
--- production data existed yet under that shape, this script does not
--- attempt to migrate it — drop it and start fresh if you already ran an
--- older version of this file:
---   drop table if exists task_occurrences;
---   drop table if exists maintenance_tasks;
+-- If you already ran an earlier version of this file, this script
+-- upgrades the existing maintenance_tasks table in place — adding the
+-- frequency/weekly_days/monthly_day/start_date/enabled columns it needs
+-- and dropping the old status/date/remarks/is_daily columns it no
+-- longer uses — rather than requiring you to drop and recreate anything.
+-- Just re-run the whole file.
 
 create extension if not exists pgcrypto;
 
@@ -61,6 +59,30 @@ create table if not exists maintenance_tasks (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Self-healing for a table that already existed from an earlier version
+-- of this script (e.g. one with status/date/remarks/is_daily columns,
+-- or simply missing a column added since): "create table if not exists"
+-- above is a no-op once the table exists, so these add whatever this
+-- version needs and drop whatever it no longer uses. Safe to re-run.
+alter table maintenance_tasks add column if not exists frequency text not null default 'once';
+alter table maintenance_tasks add column if not exists weekly_days int[] not null default '{}';
+alter table maintenance_tasks add column if not exists monthly_day int;
+alter table maintenance_tasks add column if not exists start_date date not null default current_date;
+alter table maintenance_tasks add column if not exists enabled boolean not null default true;
+alter table maintenance_tasks add column if not exists updated_at timestamptz not null default now();
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'maintenance_tasks_frequency_check'
+  ) then
+    alter table maintenance_tasks add constraint maintenance_tasks_frequency_check
+      check (frequency in ('once', 'daily', 'weekly', 'monthly'));
+  end if;
+end $$;
+alter table maintenance_tasks drop column if exists status;
+alter table maintenance_tasks drop column if exists date;
+alter table maintenance_tasks drop column if exists remarks;
+alter table maintenance_tasks drop column if exists is_daily;
 
 create index if not exists maintenance_tasks_assigned_to_idx on maintenance_tasks (assigned_to);
 create index if not exists maintenance_tasks_equipment_idx on maintenance_tasks (equipment_id);
@@ -202,3 +224,13 @@ where t.task_name in (
 and not exists (
   select 1 from task_occurrences o where o.task_id = t.id and o.due_date = current_date
 );
+
+-- ---------------------------------------------------------------------
+-- Force PostgREST to pick up the schema changes above immediately,
+-- instead of waiting for its own auto-refresh. If you still see a
+-- "Could not find column X in schema cache" error from the app right
+-- after running this script, it means the reload hasn't landed yet —
+-- wait ~10 seconds and retry, or reload manually from the Supabase
+-- Dashboard: Project Settings -> API -> "Reload schema cache".
+-- ---------------------------------------------------------------------
+notify pgrst, 'reload schema';
