@@ -22,8 +22,8 @@ ready to be upgraded to real Supabase Auth later.
   (**Today's Tasks** / **Pending** / **Upcoming** / **Completed**) sit at
   the top; each task is a card showing its frequency (always visible),
   schedule, due time if set, and a single **Update Task** button that
-  opens a sheet to change status, mark completed, add remarks, and
-  optionally attach a photo. Upcoming renders as a compact scannable list
+  opens a sheet to change status, mark completed, and add remarks.
+  Upcoming renders as a compact scannable list
   (`Today — Clean Lobby — Daily`) rather than full cards.
 - **Recurring schedule, set once** — a Manager picks Daily, Weekly (choose
   the day(s)), or Monthly (choose the date) when creating a task, and it
@@ -129,17 +129,16 @@ maintenance_tasks (          -- the recurring SCHEDULE, manager-owned
 task_occurrences (            -- one row per calendar date a task is due
   id, task_id -> maintenance_tasks.id, due_date,
   status check ('Pending'|'In Progress'|'Completed'),
-  remarks, photo_url,          -- optional evidence photo (see below)
-  completed_at, created_at
+  remarks, completed_at, created_at
 )
 ```
 
 Plus: RLS enabled with a permissive "anon full access" policy on each
-table, a public `task-photos` Storage bucket with the same permissive
-policy (for the optional photo evidence Staff can attach when updating a
-task), and idempotent sample data (safe to re-run — it only inserts rows
+table, and idempotent sample data (safe to re-run — it only inserts rows
 that don't already exist by name) — including the 8 preset Daily tasks
-and today's occurrence for each of them.
+and today's occurrence for each of them. (No photo/evidence upload —
+that was considered and dropped as unnecessary, so there's no Storage
+bucket either.)
 
 ## Scheduling &amp; recurrence
 

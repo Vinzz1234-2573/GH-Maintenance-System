@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchTasks, fetchOccurrences, ensureOccurrences, updateOccurrence, uploadOccurrencePhoto, STATUSES } from "../../lib/data";
+import { fetchTasks, fetchOccurrences, ensureOccurrences, updateOccurrence, STATUSES } from "../../lib/data";
 import { getSession } from "../../lib/session";
 import { useToast } from "../../components/useToast";
 import { StatusBadge } from "../../components/Badges";
@@ -78,19 +78,13 @@ export default function StaffDashboard() {
     .sort((a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0));
   const completedTasks = occurrences.filter((o) => o.due_date === today && o.status === "Completed" && matchesFreq(o));
 
-  async function handleSaveUpdate(occurrence, { status, remarks, photoFile }) {
+  async function handleSaveUpdate(occurrence, { status, remarks }) {
     const { error, data } = await updateOccurrence(occurrence.id, { status, remarks });
     if (error) {
       showToast(error.message);
       return;
     }
-    let nextRow = data;
-    if (photoFile) {
-      const photoResult = await uploadOccurrencePhoto(occurrence.id, photoFile);
-      if (photoResult.error) showToast("Saved, but photo upload failed: " + photoResult.error.message);
-      else nextRow = photoResult.data;
-    }
-    setOccurrences((prev) => prev.map((o) => (o.id === occurrence.id ? nextRow : o)));
+    setOccurrences((prev) => prev.map((o) => (o.id === occurrence.id ? data : o)));
     showToast("Task updated.");
     setUpdating(null);
   }
@@ -203,12 +197,7 @@ function TaskCard({ occurrence: o, task, userName, onUpdate }) {
       {task.due_time && <div className="note" style={{ margin: "2px 0" }}>⏰ Due: {formatHHMM(task.due_time)}</div>}
       <div className="note" style={{ margin: "2px 0 10px" }}>👤 Assigned to: {userName}</div>
 
-      {o.remarks && <div className="note" style={{ margin: "0 0 6px" }}><b>Remarks:</b> {o.remarks}</div>}
-      {o.photo_url && (
-        <a href={o.photo_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", margin: "0 0 10px" }}>
-          <img src={o.photo_url} alt="Evidence" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />
-        </a>
-      )}
+      {o.remarks && <div className="note" style={{ margin: "0 0 10px" }}><b>Remarks:</b> {o.remarks}</div>}
 
       <button className="btn btn-primary btn-block" onClick={onUpdate}>Update Task</button>
     </div>
@@ -244,12 +233,11 @@ function UpcomingList({ list, taskById }) {
 function UpdateTaskModal({ occurrence, task, onCancel, onSave }) {
   const [status, setStatus] = useState(occurrence.status);
   const [remarks, setRemarks] = useState(occurrence.remarks || "");
-  const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     setSaving(true);
-    await onSave({ status, remarks, photoFile });
+    await onSave({ status, remarks });
     setSaving(false);
   }
 
@@ -274,17 +262,9 @@ function UpdateTaskModal({ occurrence, task, onCancel, onSave }) {
           </select>
         </div>
 
-        <div className="field" style={{ marginBottom: 10 }}>
+        <div className="field" style={{ marginBottom: 16 }}>
           <label>Remarks</label>
           <textarea rows={3} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Optional notes" />
-        </div>
-
-        <div className="field" style={{ marginBottom: 16 }}>
-          <label>Photo Evidence (optional)</label>
-          {occurrence.photo_url && !photoFile && (
-            <div className="note" style={{ margin: "0 0 6px" }}>A photo is already attached — choose a file to replace it.</div>
-          )}
-          <input type="file" accept="image/*" capture="environment" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
         </div>
 
         <div className="dialog-actions">
