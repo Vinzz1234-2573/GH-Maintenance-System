@@ -145,6 +145,7 @@ export default function ManagerDashboard() {
               <button className="btn btn-success btn-sm" onClick={() => quickStatus(o, "Completed")}>✓ Mark Completed</button>
             )}
             <button className="btn btn-ghost btn-sm" onClick={() => setEditing(task)}>Edit</button>
+            <button className="btn btn-ghost btn-sm" style={{ color: "var(--danger)" }} onClick={() => setDeleteTarget(task)}>Delete</button>
           </div>
         </td>
       </tr>
