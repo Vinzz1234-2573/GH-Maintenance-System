@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { fetchTasks, fetchEquipment, fetchStaffUsers, updateTask, deleteTask } from "../../lib/data";
+import { fetchTasks, fetchEquipment, fetchStaffUsers, updateTask, deleteTask, effectiveStatus } from "../../lib/data";
 import { isSupabaseConfigured } from "../../lib/supabaseClient";
 import { useToast } from "../../components/useToast";
 import { StatusBadge } from "../../components/Badges";
@@ -49,9 +49,9 @@ export default function ManagerDashboard() {
 
   const counts = {
     total: tasks.length,
-    Pending: tasks.filter((t) => t.status === "Pending").length,
-    "In Progress": tasks.filter((t) => t.status === "In Progress").length,
-    Completed: tasks.filter((t) => t.status === "Completed").length,
+    Pending: tasks.filter((t) => effectiveStatus(t) === "Pending").length,
+    "In Progress": tasks.filter((t) => effectiveStatus(t) === "In Progress").length,
+    Completed: tasks.filter((t) => effectiveStatus(t) === "Completed").length,
   };
 
   async function handleSaveEdit(values) {
@@ -126,9 +126,9 @@ export default function ManagerDashboard() {
             <tbody>
               {tasks.map((t) => (
                 <tr key={t.id}>
-                  <td data-label="Equipment">{equipmentById[t.equipment_id]?.equipment_name || "—"}</td>
+                  <td data-label="Equipment">{equipmentById[t.equipment_id]?.equipment_name || "—"}{t.is_daily && <span className="note"> · Daily</span>}</td>
                   <td data-label="Assigned Staff">{staffById[t.assigned_to]?.name || "Unassigned"}</td>
-                  <td data-label="Status"><StatusBadge status={t.status} /></td>
+                  <td data-label="Status"><StatusBadge status={effectiveStatus(t)} /></td>
                   <td data-label="Due Date">{t.date ? formatDate(t.date) : "—"}</td>
                   <td data-label="Actions">
                     <div className="table-actions">
@@ -168,7 +168,7 @@ export default function ManagerDashboard() {
               <div><b>Task:</b> {viewing.task_name}</div>
               {viewing.description && <div><b>Details:</b> {viewing.description}</div>}
               <div><b>Assigned To:</b> {staffById[viewing.assigned_to]?.name || "Unassigned"}</div>
-              <div><b>Status:</b> <StatusBadge status={viewing.status} /></div>
+              <div><b>Status:</b> <StatusBadge status={effectiveStatus(viewing)} /></div>
               <div><b>Due Date:</b> {viewing.date ? formatDate(viewing.date) : "—"}</div>
               {viewing.remarks && <div><b>Remarks:</b> {viewing.remarks}</div>}
             </div>

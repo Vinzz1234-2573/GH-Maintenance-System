@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchTasks, fetchEquipment, updateTask, STATUSES } from "../../lib/data";
+import { fetchTasks, fetchEquipment, updateTask, markTaskStatus, effectiveStatus, STATUSES } from "../../lib/data";
 import { getSession } from "../../lib/session";
 import { useToast } from "../../components/useToast";
 import { StatusBadge } from "../../components/Badges";
@@ -40,14 +40,14 @@ export default function StaffDashboard() {
   }, [equipment]);
 
   const groups = {
-    Pending: tasks.filter((t) => t.status === "Pending"),
-    "In Progress": tasks.filter((t) => t.status === "In Progress"),
-    Completed: tasks.filter((t) => t.status === "Completed"),
+    Pending: tasks.filter((t) => effectiveStatus(t) === "Pending"),
+    "In Progress": tasks.filter((t) => effectiveStatus(t) === "In Progress"),
+    Completed: tasks.filter((t) => effectiveStatus(t) === "Completed"),
   };
 
   async function saveStatus(task, status) {
     setSavingId(task.id);
-    const { error } = await updateTask(task.id, { status });
+    const { error } = await markTaskStatus(task.id, status);
     if (error) showToast(error.message);
     else showToast("Task updated.");
     await load();
@@ -90,11 +90,15 @@ export default function StaffDashboard() {
               list.map((t) => {
                 const eq = equipmentById[t.equipment_id];
                 const draft = remarksDraft[t.id] ?? t.remarks ?? "";
+                const status = effectiveStatus(t);
                 return (
                   <div className="card" key={t.id}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14.5 }}>{eq?.equipment_name || "Equipment removed"}</div>
-                      <StatusBadge status={t.status} />
+                      <div style={{ fontWeight: 700, fontSize: 14.5 }}>
+                        {eq?.equipment_name || "Equipment removed"}
+                        {t.is_daily && <span className="note" style={{ marginLeft: 6 }}>· Daily</span>}
+                      </div>
+                      <StatusBadge status={status} />
                     </div>
                     <div className="note" style={{ margin: "0 0 8px" }}>
                       {eq?.location ? eq.location + " · " : ""}Due: {t.date ? formatDate(t.date) : "No due date"}
@@ -105,11 +109,11 @@ export default function StaffDashboard() {
                     <div className="field-row" style={{ alignItems: "flex-end" }}>
                       <div className="field">
                         <label>Status</label>
-                        <select value={t.status} disabled={savingId === t.id} onChange={(e) => saveStatus(t, e.target.value)}>
+                        <select value={status} disabled={savingId === t.id} onChange={(e) => saveStatus(t, e.target.value)}>
                           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
-                      {t.status !== "Completed" && (
+                      {status !== "Completed" && (
                         <button className="btn btn-secondary" disabled={savingId === t.id} onClick={() => saveStatus(t, "Completed")}>
                           Mark Completed
                         </button>

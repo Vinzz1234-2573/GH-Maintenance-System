@@ -5,7 +5,7 @@ import { STATUSES } from "../lib/data";
 
 const BLANK = {
   equipment_id: "", task_name: "", description: "",
-  assigned_to: "", status: "Pending", date: "", remarks: "",
+  assigned_to: "", status: "Pending", date: "", remarks: "", is_daily: false,
 };
 
 export default function TaskForm({ initial, equipmentList, staffList, onSubmit, onCancel, submitLabel = "Save Task" }) {
@@ -70,6 +70,18 @@ export default function TaskForm({ initial, equipmentList, staffList, onSubmit, 
       <div className="field" style={{ marginBottom: 10 }}>
         <label>Due Date</label>
         <input type="date" value={values.date || ""} onChange={set("date")} />
+      </div>
+      <div className="field" style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          type="checkbox"
+          id="is-daily-toggle"
+          style={{ width: "auto" }}
+          checked={values.is_daily}
+          onChange={(e) => setValues((v) => ({ ...v, is_daily: e.target.checked }))}
+        />
+        <label htmlFor="is-daily-toggle" style={{ margin: 0, textTransform: "none", fontSize: 13.5 }}>
+          Repeats daily — resets to Pending every day, for staff to check off each shift
+        </label>
       </div>
       <div className="field" style={{ marginBottom: 16 }}>
         <label>Remarks</label>

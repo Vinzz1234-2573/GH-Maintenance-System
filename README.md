@@ -16,6 +16,12 @@ real Supabase Auth later.
 - **Staff** (`/staff`) — only tasks assigned to them, grouped into
   Pending / In Progress / Completed, with a status dropdown, a quick
   "Mark Completed" button, and a remarks box.
+- **Preset daily checklist** — the 8 items from `docs/Daily Equipment
+  Maintenance Record.docx` (Toilet Fixtures, Air-condition & Fan, Water
+  Pump, Kitchen & Drainage, Lift & Cargo Lift, Lighting, Flooring &
+  Ceiling, Equipment) are seeded automatically by `sql/schema.sql` — the
+  Manager never has to create these by hand, just reassign them to real
+  staff. See "Daily checklist items" below for how the daily reset works.
 
 It's a normal website — open it in Chrome, Edge, or Safari. Nothing to install.
 
@@ -32,7 +38,7 @@ Beyond just explaining that, this rebuild also removes the failure mode
 structurally:
 
 - The app now talks to Supabase **directly from the browser** using the
-  public anon key (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`),
+  public anon key (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`),
   per your request — no more server-side API routes that could throw an
   opaque 500.
 - Every data call (`lib/data.js`) checks `isSupabaseConfigured` first and
@@ -60,7 +66,7 @@ structurally:
    manager, two sample staff, sample equipment, and sample tasks.
 4. Go to **Project Settings → API** and copy:
    - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
-   - **anon / public key** (not the service_role key) → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **anon / public key** (not the service_role key) → `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
 These are **public** client-side variables by design (that's what
 `NEXT_PUBLIC_` means in Next.js) — that's fine because Row Level Security
@@ -99,13 +105,41 @@ equipment (id, equipment_name, location, created_at)
 maintenance_tasks (
   id, equipment_id -> equipment.id, task_name, description,
   assigned_to -> users.id, status check ('Pending'|'In Progress'|'Completed'),
-  date, remarks, created_at
+  date, remarks, is_daily, created_at
 )
 ```
 
 Plus: RLS enabled with a permissive "anon full access" policy on each
 table, and idempotent sample data (safe to re-run — it only inserts rows
-that don't already exist by name).
+that don't already exist by name) — including the 8 preset daily
+checklist tasks below.
+
+## Daily checklist items (`is_daily`)
+
+A maintenance task marked `is_daily = true` is treated as due again every
+day, no matter what it was marked yesterday — this is what makes the 8
+preset equipment checks behave like a real daily checklist instead of a
+one-time to-do. The logic (`effectiveStatus()` in `lib/data.js`) is
+purely a display-time rule, not a scheduled job:
+
+- If `is_daily` is true and the task's stored `date` is before today, the
+  app shows it as **Pending** everywhere (Staff page, Dashboard, task
+  list) regardless of the stored `status`.
+- The stored `status`/`date` only change when someone actually acts on
+  the task — `markTaskStatus()` stamps `date = today` whenever staff
+  update a task's status, so the next calendar day it resets automatically.
+- One-off tasks a manager creates for a specific repair are left with
+  `is_daily = false` by default and behave normally — completed stays
+  completed, no daily reset.
+- A manager can toggle "Repeats daily" on any task from Add/Edit — it's
+  not limited to the 8 presets.
+
+**Trade-off worth knowing:** this keeps the database to 3 tables as
+requested, but it means there's no historical log of *previous* days'
+completions for a daily task — only whatever the single row currently
+says. If you later want an audit trail ("was the water pump checked on
+the 3rd?"), that needs a separate log table recording one row per
+task-per-day, which is a natural follow-up if it becomes important.
 
 ## Login flow (name-only, no password yet)
 

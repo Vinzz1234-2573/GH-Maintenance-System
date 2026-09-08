@@ -43,8 +43,15 @@ create table if not exists maintenance_tasks (
   status text not null default 'Pending' check (status in ('Pending', 'In Progress', 'Completed')),
   date date,
   remarks text,
+  -- Daily checklist items (e.g. the preset equipment checks below) are
+  -- marked is_daily = true: the app treats them as due again every day
+  -- regardless of yesterday's status (see lib/data.js effectiveStatus).
+  -- One-off tasks a manager creates for a specific repair stay false and
+  -- keep whatever status they're given, with no daily reset.
+  is_daily boolean not null default false,
   created_at timestamptz not null default now()
 );
+alter table maintenance_tasks add column if not exists is_daily boolean not null default false;
 
 create index if not exists maintenance_tasks_assigned_to_idx on maintenance_tasks (assigned_to);
 create index if not exists maintenance_tasks_equipment_idx on maintenance_tasks (equipment_id);
@@ -74,7 +81,7 @@ drop policy if exists "anon full access" on maintenance_tasks;
 create policy "anon full access" on maintenance_tasks for all using (true) with check (true);
 
 -- ---------------------------------------------------------------------
--- Sample data — safe to re-run (only inserts if not already present)
+-- Sample users — safe to re-run (only inserts if not already present)
 -- ---------------------------------------------------------------------
 
 insert into users (name, role)
@@ -86,33 +93,67 @@ select 'John', 'staff' where not exists (select 1 from users where name = 'John'
 insert into users (name, role)
 select 'Ali', 'staff' where not exists (select 1 from users where name = 'Ali');
 
-insert into equipment (equipment_name, location)
-select 'Water Pump', 'Basement' where not exists (select 1 from equipment where equipment_name = 'Water Pump');
+-- ---------------------------------------------------------------------
+-- Preset daily checklist — the 8 items from "Daily Equipment
+-- Maintenance Record", pre-loaded so the Manager never has to create
+-- these by hand. Each is marked is_daily = true, split alternately
+-- between the two sample staff — reassign them to real staff any time
+-- from Task Management -> Edit.
+-- ---------------------------------------------------------------------
 
-insert into equipment (equipment_name, location)
-select 'Air-Condition Unit', 'Level 2' where not exists (select 1 from equipment where equipment_name = 'Air-Condition Unit');
+insert into equipment (equipment_name)
+select 'Toilet Fixtures' where not exists (select 1 from equipment where equipment_name = 'Toilet Fixtures');
+insert into equipment (equipment_name)
+select 'Air-condition & Fan' where not exists (select 1 from equipment where equipment_name = 'Air-condition & Fan');
+insert into equipment (equipment_name)
+select 'Water Pump' where not exists (select 1 from equipment where equipment_name = 'Water Pump');
+insert into equipment (equipment_name)
+select 'Kitchen & Drainage' where not exists (select 1 from equipment where equipment_name = 'Kitchen & Drainage');
+insert into equipment (equipment_name)
+select 'Lift & Cargo Lift' where not exists (select 1 from equipment where equipment_name = 'Lift & Cargo Lift');
+insert into equipment (equipment_name)
+select 'Lighting' where not exists (select 1 from equipment where equipment_name = 'Lighting');
+insert into equipment (equipment_name)
+select 'Flooring & Ceiling' where not exists (select 1 from equipment where equipment_name = 'Flooring & Ceiling');
+insert into equipment (equipment_name)
+select 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)' where not exists (select 1 from equipment where equipment_name = 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)');
 
-insert into equipment (equipment_name, location)
-select 'Passenger Lift', 'Main Lobby' where not exists (select 1 from equipment where equipment_name = 'Passenger Lift');
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
+select e.id, 'Toilet Fixtures', 'Flush, water leakage, tap, toilet seat, basin, exhaust fan', u.id, 'Pending', true
+from equipment e, users u where e.equipment_name = 'Toilet Fixtures' and u.name = 'John'
+and not exists (select 1 from maintenance_tasks where task_name = 'Toilet Fixtures');
 
-insert into equipment (equipment_name, location)
-select 'Kitchen Drainage', 'Kitchen' where not exists (select 1 from equipment where equipment_name = 'Kitchen Drainage');
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
+select e.id, 'Air-condition & Fan', 'Operation, noise, vibration, compressor', u.id, 'Pending', true
+from equipment e, users u where e.equipment_name = 'Air-condition & Fan' and u.name = 'Ali'
+and not exists (select 1 from maintenance_tasks where task_name = 'Air-condition & Fan');
 
--- Sample maintenance tasks, assigned to the sample staff above.
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, date, remarks)
-select e.id, 'Check water pump pressure', 'Check pressure, leakage, noise, vibration, motor condition', u.id, 'Pending', current_date, ''
-from equipment e, users u
-where e.equipment_name = 'Water Pump' and u.name = 'John'
-and not exists (select 1 from maintenance_tasks where task_name = 'Check water pump pressure');
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
+select e.id, 'Water Pump', 'Pressure, leakage, noise, vibration, motor condition', u.id, 'Pending', true
+from equipment e, users u where e.equipment_name = 'Water Pump' and u.name = 'John'
+and not exists (select 1 from maintenance_tasks where task_name = 'Water Pump');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, date, remarks)
-select e.id, 'Service air-conditioning', 'Operation, noise, vibration, compressor', u.id, 'In Progress', current_date, 'Ordered replacement filter'
-from equipment e, users u
-where e.equipment_name = 'Air-Condition Unit' and u.name = 'Ali'
-and not exists (select 1 from maintenance_tasks where task_name = 'Service air-conditioning');
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
+select e.id, 'Kitchen & Drainage', 'Pump operation, water level, leakage, alarm, water flow, blockage, smell', u.id, 'Pending', true
+from equipment e, users u where e.equipment_name = 'Kitchen & Drainage' and u.name = 'Ali'
+and not exists (select 1 from maintenance_tasks where task_name = 'Kitchen & Drainage');
 
-insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, date, remarks)
-select e.id, 'Inspect passenger lift', 'Operation, noise, vibration, emergency phone', u.id, 'Completed', current_date - 1, 'All clear'
-from equipment e, users u
-where e.equipment_name = 'Passenger Lift' and u.name = 'John'
-and not exists (select 1 from maintenance_tasks where task_name = 'Inspect passenger lift');
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
+select e.id, 'Lift & Cargo Lift', 'Operation, noise, vibration, compressor', u.id, 'Pending', true
+from equipment e, users u where e.equipment_name = 'Lift & Cargo Lift' and u.name = 'John'
+and not exists (select 1 from maintenance_tasks where task_name = 'Lift & Cargo Lift');
+
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
+select e.id, 'Lighting', 'Bulbs lighting', u.id, 'Pending', true
+from equipment e, users u where e.equipment_name = 'Lighting' and u.name = 'Ali'
+and not exists (select 1 from maintenance_tasks where task_name = 'Lighting');
+
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
+select e.id, 'Flooring & Ceiling', 'Broken / damaged sections', u.id, 'Pending', true
+from equipment e, users u where e.equipment_name = 'Flooring & Ceiling' and u.name = 'John'
+and not exists (select 1 from maintenance_tasks where task_name = 'Flooring & Ceiling');
+
+insert into maintenance_tasks (equipment_id, task_name, description, assigned_to, status, is_daily)
+select e.id, 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)', 'Chairs, tables, beds, windows, cabinets', u.id, 'Pending', true
+from equipment e, users u where e.equipment_name = 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)' and u.name = 'Ali'
+and not exists (select 1 from maintenance_tasks where task_name = 'Equipment (Chairs, Tables, Beds, Windows, Cabinets)');

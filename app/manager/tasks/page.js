@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { fetchTasks, fetchEquipment, fetchStaffUsers, updateTask, deleteTask, STATUSES } from "../../../lib/data";
+import { fetchTasks, fetchEquipment, fetchStaffUsers, updateTask, deleteTask, effectiveStatus, STATUSES } from "../../../lib/data";
 import { useToast } from "../../../components/useToast";
 import { StatusBadge } from "../../../components/Badges";
 import ConfirmDialog from "../../../components/ConfirmDialog";
@@ -44,7 +44,7 @@ export default function MaintenanceTasksPage() {
   }, [staff]);
 
   const filtered = tasks.filter((t) => {
-    if (filters.status !== "all" && t.status !== filters.status) return false;
+    if (filters.status !== "all" && effectiveStatus(t) !== filters.status) return false;
     if (filters.assignedTo !== "all" && t.assigned_to !== filters.assignedTo) return false;
     if (filters.equipmentId !== "all" && t.equipment_id !== filters.equipmentId) return false;
     return true;
@@ -130,10 +130,10 @@ export default function MaintenanceTasksPage() {
               ) : (
                 filtered.map((t) => (
                   <tr key={t.id}>
-                    <td data-label="Equipment">{equipmentById[t.equipment_id]?.equipment_name || "—"}</td>
+                    <td data-label="Equipment">{equipmentById[t.equipment_id]?.equipment_name || "—"}{t.is_daily && <span className="note"> · Daily</span>}</td>
                     <td data-label="Task">{t.task_name}</td>
                     <td data-label="Assigned Staff">{staffById[t.assigned_to]?.name || "Unassigned"}</td>
-                    <td data-label="Status"><StatusBadge status={t.status} /></td>
+                    <td data-label="Status"><StatusBadge status={effectiveStatus(t)} /></td>
                     <td data-label="Due Date">{t.date ? formatDate(t.date) : "—"}</td>
                     <td data-label="Actions">
                       <div className="table-actions">
