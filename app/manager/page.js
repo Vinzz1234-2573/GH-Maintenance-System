@@ -30,6 +30,7 @@ export default function ManagerDashboard() {
   const [preset, setPreset] = useState("today");
   const [customFrom, setCustomFrom] = useState(todayStr());
   const [customTo, setCustomTo] = useState(todayStr());
+  const [statusFilter, setStatusFilter] = useState("all");
   const [editing, setEditing] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -80,6 +81,10 @@ export default function ManagerDashboard() {
 
   const today = todayStr();
   const rangeOccurrences = occurrences.filter((o) => o.due_date >= from && o.due_date <= to);
+  const displayOccurrences =
+    statusFilter === "all"
+      ? rangeOccurrences
+      : rangeOccurrences.filter((o) => occurrenceDisplayStatus(o) === statusFilter);
   const overdueOccurrences = occurrences
     .filter((o) => o.due_date < today && o.status !== "Completed")
     .sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
@@ -193,12 +198,43 @@ export default function ManagerDashboard() {
             </div>
           </>
         )}
+        <div className="field">
+          <label>Status</label>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">All</option>
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+            <option value="Overdue">Overdue</option>
+          </select>
+        </div>
+        {statusFilter !== "all" && (
+          <button className="btn btn-secondary" onClick={() => setStatusFilter("all")}>Clear Filter</button>
+        )}
       </div>
 
       <div className="kpi-grid">
-        <div className="kpi-card"><div className="kpi-value">{counts.pending}</div><div className="kpi-label">Pending (range)</div></div>
-        <div className="kpi-card"><div className="kpi-value">{counts.completed}</div><div className="kpi-label">Completed (range)</div></div>
-        <div className="kpi-card"><div className="kpi-value">{counts.overdue}</div><div className="kpi-label">Overdue</div></div>
+        <button
+          className="kpi-card"
+          style={{ textAlign: "left", cursor: "pointer", width: "100%", border: statusFilter === "Pending" ? "2px solid var(--primary)" : undefined }}
+          onClick={() => setStatusFilter(statusFilter === "Pending" ? "all" : "Pending")}
+        >
+          <div className="kpi-value">{counts.pending}</div><div className="kpi-label">Pending (range)</div>
+        </button>
+        <button
+          className="kpi-card"
+          style={{ textAlign: "left", cursor: "pointer", width: "100%", border: statusFilter === "Completed" ? "2px solid var(--primary)" : undefined }}
+          onClick={() => setStatusFilter(statusFilter === "Completed" ? "all" : "Completed")}
+        >
+          <div className="kpi-value">{counts.completed}</div><div className="kpi-label">Completed (range)</div>
+        </button>
+        <button
+          className="kpi-card"
+          style={{ textAlign: "left", cursor: "pointer", width: "100%", border: statusFilter === "Overdue" ? "2px solid var(--primary)" : undefined }}
+          onClick={() => setStatusFilter(statusFilter === "Overdue" ? "all" : "Overdue")}
+        >
+          <div className="kpi-value">{counts.overdue}</div><div className="kpi-label">Overdue</div>
+        </button>
         <div className="kpi-card"><div className="kpi-value">{counts.disabled}</div><div className="kpi-label">Disabled Tasks</div></div>
       </div>
 
@@ -234,17 +270,28 @@ export default function ManagerDashboard() {
             </div>
           )}
 
-          <div className="section-title">Maintenance Tasks — {PRESETS.find((p) => p[0] === preset)?.[1]}</div>
+          <div className="panel-row">
+            <div className="section-title" style={{ margin: 0 }}>
+              Maintenance Tasks — {PRESETS.find((p) => p[0] === preset)?.[1]}
+              {statusFilter !== "all" && ` · ${statusFilter}`}
+            </div>
+            <div className="note" style={{ margin: 0 }}>{displayOccurrences.length} shown</div>
+          </div>
           <div className="data-table-wrap">
             <table className="data-table">
               <thead>
                 <tr><th>Equipment</th><th>Task</th><th>Assigned Staff</th><th>Due Date</th><th>Frequency</th><th>Status</th><th>Actions</th></tr>
               </thead>
               <tbody>
-                {rangeOccurrences.length === 0 ? (
-                  <tr><td colSpan={7}><div className="empty">Nothing scheduled in this range.</div></td></tr>
+                {displayOccurrences.length === 0 ? (
+                  <tr><td colSpan={7}><div className="empty">
+                    {statusFilter === "all"
+                      ? "Nothing scheduled in this range."
+                      : `No ${statusFilter} tasks in this range.` +
+                        (statusFilter === "Overdue" ? " (Overdue items outside this date range still show in the panel above.)" : "")}
+                  </div></td></tr>
                 ) : (
-                  rangeOccurrences.map(occurrenceRow)
+                  displayOccurrences.map(occurrenceRow)
                 )}
               </tbody>
             </table>

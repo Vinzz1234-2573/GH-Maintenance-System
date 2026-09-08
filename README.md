@@ -180,6 +180,11 @@ being overwritten every day.
   table to that window; **Overdue** and **Disabled Tasks** are shown
   as absolute counts regardless of the filter, since "what's overdue"
   and "what's turned off" aren't really date-range questions.
+- **Status filter, on top of the date filter** — a Status dropdown (or
+  clicking the Pending/Completed/Overdue KPI cards directly) narrows the
+  task table further, e.g. Today + Completed shows exactly what's been
+  done today. The KPI counts themselves stay as the full range breakdown
+  regardless of this filter — it only narrows the table below them.
 
 **Limitation worth knowing:** because occurrences are generated lazily
 (on view, not on a schedule), a date that nobody ever viewed a dashboard
