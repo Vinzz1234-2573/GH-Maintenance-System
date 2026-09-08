@@ -142,7 +142,7 @@ export default function ManagerDashboard() {
         <td data-label="Actions">
           <div className="table-actions">
             {o.status !== "Completed" && (
-              <button className="btn btn-ghost btn-sm" onClick={() => quickStatus(o, "Completed")}>Mark Completed</button>
+              <button className="btn btn-success btn-sm" onClick={() => quickStatus(o, "Completed")}>✓ Mark Completed</button>
             )}
             <button className="btn btn-ghost btn-sm" onClick={() => setEditing(task)}>Edit</button>
           </div>
@@ -216,27 +216,46 @@ export default function ManagerDashboard() {
       <div className="kpi-grid">
         <button
           className="kpi-card"
-          style={{ textAlign: "left", cursor: "pointer", width: "100%", border: statusFilter === "Pending" ? "2px solid var(--primary)" : undefined }}
+          style={{
+            textAlign: "left", cursor: "pointer", width: "100%", background: "var(--info-bg)",
+            border: statusFilter === "Pending" ? "2px solid var(--primary)" : "1px solid var(--border)",
+          }}
           onClick={() => setStatusFilter(statusFilter === "Pending" ? "all" : "Pending")}
         >
+          <div className="kpi-icon">⏳</div>
           <div className="kpi-value">{counts.pending}</div><div className="kpi-label">Pending (range)</div>
         </button>
         <button
           className="kpi-card"
-          style={{ textAlign: "left", cursor: "pointer", width: "100%", border: statusFilter === "Completed" ? "2px solid var(--primary)" : undefined }}
+          style={{
+            textAlign: "left", cursor: "pointer", width: "100%", background: "var(--success-bg)",
+            border: statusFilter === "Completed" ? "2px solid var(--primary)" : "1px solid var(--border)",
+          }}
           onClick={() => setStatusFilter(statusFilter === "Completed" ? "all" : "Completed")}
         >
-          <div className="kpi-value">{counts.completed}</div><div className="kpi-label">Completed (range)</div>
+          <div className="kpi-icon">✅</div>
+          <div className="kpi-value" style={{ color: "var(--success)" }}>{counts.completed}</div>
+          <div className="kpi-label">Completed (range)</div>
         </button>
         <button
           className="kpi-card"
-          style={{ textAlign: "left", cursor: "pointer", width: "100%", border: statusFilter === "Overdue" ? "2px solid var(--primary)" : undefined }}
+          style={{
+            textAlign: "left", cursor: "pointer", width: "100%", background: "var(--danger-bg)",
+            border: statusFilter === "Overdue" ? "2px solid var(--primary)" : "1px solid var(--border)",
+          }}
           onClick={() => setStatusFilter(statusFilter === "Overdue" ? "all" : "Overdue")}
         >
-          <div className="kpi-value">{counts.overdue}</div><div className="kpi-label">Overdue</div>
+          <div className="kpi-icon">⚠️</div>
+          <div className="kpi-value" style={{ color: "var(--danger)" }}>{counts.overdue}</div>
+          <div className="kpi-label">Overdue</div>
         </button>
-        <div className="kpi-card"><div className="kpi-value">{counts.disabled}</div><div className="kpi-label">Disabled Tasks</div></div>
+        <div className="kpi-card" style={{ background: "#f4f5f7" }}>
+          <div className="kpi-icon">🚫</div>
+          <div className="kpi-value" style={{ color: "var(--muted)" }}>{counts.disabled}</div>
+          <div className="kpi-label">Disabled Tasks</div>
+        </div>
       </div>
+      <div className="note" style={{ margin: "-10px 0 18px" }}>Tap a card to filter the list below.</div>
 
       {loading ? (
         <div className="loading">Loading tasks...</div>
@@ -254,7 +273,7 @@ export default function ManagerDashboard() {
             <div className="card" style={{ background: "var(--danger-bg)", borderColor: "#f0b9b9", marginBottom: 18 }}>
               <div className="panel-row" style={{ marginBottom: 8 }}>
                 <div className="section-title" style={{ margin: 0, color: "var(--danger)" }}>
-                  Overdue ({overdueOccurrences.length})
+                  ⚠️ Overdue ({overdueOccurrences.length})
                 </div>
               </div>
               {overdueOccurrences.map((o) => {
@@ -263,7 +282,7 @@ export default function ManagerDashboard() {
                 return (
                   <div key={o.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid rgba(0,0,0,0.06)", fontSize: 13.5 }}>
                     <span><b>{task.task_name}</b> — {staffById[task.assigned_to]?.name || "Unassigned"} · Due {formatDate(o.due_date)}</span>
-                    <button className="btn btn-ghost btn-sm" onClick={() => quickStatus(o, "Completed")}>Mark Completed</button>
+                    <button className="btn btn-success btn-sm" onClick={() => quickStatus(o, "Completed")}>✓ Mark Completed</button>
                   </div>
                 );
               })}
@@ -299,7 +318,7 @@ export default function ManagerDashboard() {
 
           {disabledTasks.length > 0 && (
             <>
-              <div className="section-title" style={{ marginTop: 22 }}>Disabled Tasks ({disabledTasks.length})</div>
+              <div className="section-title" style={{ marginTop: 22 }}>🚫 Disabled Tasks ({disabledTasks.length})</div>
               <div className="data-table-wrap">
                 <table className="data-table">
                   <thead><tr><th>Task</th><th>Equipment</th><th>Assigned Staff</th><th>Actions</th></tr></thead>
