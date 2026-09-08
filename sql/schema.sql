@@ -55,6 +55,7 @@ create table if not exists maintenance_tasks (
   weekly_days int[] not null default '{}',   -- ISO weekday numbers, Mon=1..Sun=7 (frequency = 'weekly')
   monthly_day int,                            -- day of month, 1-31, clamped to month length (frequency = 'monthly')
   start_date date not null default current_date, -- also the single due date when frequency = 'once'
+  due_time text,                              -- optional 'HH:MM' 24h, shown on staff task cards
   enabled boolean not null default true,      -- manager enable/disable — disabled tasks stop generating occurrences
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -70,6 +71,7 @@ alter table maintenance_tasks add column if not exists weekly_days int[] not nul
 alter table maintenance_tasks add column if not exists monthly_day int;
 alter table maintenance_tasks add column if not exists start_date date not null default current_date;
 alter table maintenance_tasks add column if not exists enabled boolean not null default true;
+alter table maintenance_tasks add column if not exists due_time text;
 alter table maintenance_tasks add column if not exists updated_at timestamptz not null default now();
 do $$ begin
   if not exists (
@@ -96,10 +98,12 @@ create table if not exists task_occurrences (
   due_date date not null,
   status text not null default 'Pending' check (status in ('Pending', 'In Progress', 'Completed')),
   remarks text,
+  photo_url text, -- optional evidence photo, uploaded to the 'task-photos' storage bucket below
   completed_at timestamptz,
   created_at timestamptz not null default now(),
   unique (task_id, due_date)
 );
+alter table task_occurrences add column if not exists photo_url text;
 
 create index if not exists task_occurrences_due_date_idx on task_occurrences (due_date);
 create index if not exists task_occurrences_task_idx on task_occurrences (task_id);
@@ -131,6 +135,18 @@ create policy "anon full access" on maintenance_tasks for all using (true) with 
 
 drop policy if exists "anon full access" on task_occurrences;
 create policy "anon full access" on task_occurrences for all using (true) with check (true);
+
+-- Storage bucket for the optional "photo evidence" a staff member can
+-- attach when updating a task. Same permissive stance as the tables
+-- above — public bucket, anon can upload/read — for the same reason:
+-- no real auth exists yet to scope it to.
+insert into storage.buckets (id, name, public)
+values ('task-photos', 'task-photos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "anon full access task-photos" on storage.objects;
+create policy "anon full access task-photos" on storage.objects
+  for all using (bucket_id = 'task-photos') with check (bucket_id = 'task-photos');
 
 -- ---------------------------------------------------------------------
 -- Sample users — safe to re-run (only inserts if not already present)

@@ -17,9 +17,14 @@ ready to be upgraded to real Supabase Auth later.
   **Back to Website** and **Login to ECMS** (external link to
   `https://ecms.gentlehill.my/login` — a separate system, this is just a
   shortcut).
-- **Staff** (`/staff`) — only tasks assigned to them, in three sections:
-  **Today's Tasks**, **Completed Today**, and **Upcoming Tasks** — with a
-  status dropdown, a quick "Mark Completed" button, and a remarks box.
+- **Staff** (`/staff`) — mobile-first, only tasks assigned to them. A
+  frequency filter (All/Daily/Weekly/Monthly) and four quick-action tabs
+  (**Today's Tasks** / **Pending** / **Upcoming** / **Completed**) sit at
+  the top; each task is a card showing its frequency (always visible),
+  schedule, due time if set, and a single **Update Task** button that
+  opens a sheet to change status, mark completed, add remarks, and
+  optionally attach a photo. Upcoming renders as a compact scannable list
+  (`Today — Clean Lobby — Daily`) rather than full cards.
 - **Recurring schedule, set once** — a Manager picks Daily, Weekly (choose
   the day(s)), or Monthly (choose the date) when creating a task, and it
   keeps appearing for Staff automatically from then on — see "Scheduling
@@ -117,18 +122,22 @@ maintenance_tasks (          -- the recurring SCHEDULE, manager-owned
   weekly_days int[],          -- ISO weekday numbers, Mon=1..Sun=7
   monthly_day int,            -- 1-31, clamped to month length
   start_date,                 -- also the single due date when frequency='once'
+  due_time,                   -- optional 'HH:MM', shown on staff task cards
   enabled,                    -- manager enable/disable
   created_at, updated_at
 )
 task_occurrences (            -- one row per calendar date a task is due
   id, task_id -> maintenance_tasks.id, due_date,
   status check ('Pending'|'In Progress'|'Completed'),
-  remarks, completed_at, created_at
+  remarks, photo_url,          -- optional evidence photo (see below)
+  completed_at, created_at
 )
 ```
 
 Plus: RLS enabled with a permissive "anon full access" policy on each
-table, and idempotent sample data (safe to re-run — it only inserts rows
+table, a public `task-photos` Storage bucket with the same permissive
+policy (for the optional photo evidence Staff can attach when updating a
+task), and idempotent sample data (safe to re-run — it only inserts rows
 that don't already exist by name) — including the 8 preset Daily tasks
 and today's occurrence for each of them.
 

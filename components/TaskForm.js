@@ -6,7 +6,7 @@ import { todayStr } from "../lib/dates";
 
 const BLANK = {
   equipment_id: "", task_name: "", description: "", assigned_to: "",
-  frequency: "once", weekly_days: [], monthly_day: 1, start_date: "", enabled: true,
+  frequency: "once", weekly_days: [], monthly_day: 1, start_date: "", due_time: "", enabled: true,
 };
 
 export default function TaskForm({ initial, equipmentList, staffList, onSubmit, onCancel, submitLabel = "Save Task" }) {
@@ -131,6 +131,11 @@ export default function TaskForm({ initial, equipmentList, staffList, onSubmit, 
           <input type="date" value={values.start_date} onChange={set("start_date")} />
         </div>
       )}
+
+      <div className="field" style={{ marginBottom: 10 }}>
+        <label>Due Time (optional)</label>
+        <input type="time" value={values.due_time || ""} onChange={set("due_time")} />
+      </div>
 
       <div className="field" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
         <input
