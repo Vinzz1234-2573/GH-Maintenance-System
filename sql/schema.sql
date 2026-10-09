@@ -2,6 +2,11 @@
 -- Run this in the Supabase SQL Editor (Project -> SQL Editor -> New query).
 -- Safe to re-run: every create/insert is idempotent.
 --
+-- >>> UPDATED for photo evidence + Manager review: re-run THIS WHOLE FILE
+-- >>> in the Supabase SQL Editor. It adds the new statuses/columns, the
+-- >>> task_photos table and the private "task-photos" Storage bucket
+-- >>> (see "Photo evidence + Manager review" near the end).
+--
 -- Two-table model for tasks:
 --   maintenance_tasks  — the recurring SCHEDULE a manager defines once
 --                        (equipment, description, who it's assigned to,
@@ -102,7 +107,8 @@ create table if not exists task_occurrences (
   created_at timestamptz not null default now(),
   unique (task_id, due_date)
 );
--- No photo/evidence upload — not needed, so no storage bucket either.
+-- Legacy single-photo column from an early version — photos now live in
+-- the task_photos table + "task-photos" Storage bucket (see below).
 alter table task_occurrences drop column if exists photo_url;
 
 create index if not exists task_occurrences_due_date_idx on task_occurrences (due_date);
@@ -228,6 +234,89 @@ where t.task_name in (
 and not exists (
   select 1 from task_occurrences o where o.task_id = t.id and o.due_date = current_date
 );
+
+-- =====================================================================
+-- Photo evidence + Manager review
+-- =====================================================================
+-- Status flow: Pending -> In Progress -> Awaiting Review -> Completed.
+-- A Manager can reject Awaiting Review -> Rejected (shown to staff as
+-- "Needs Correction" with the Manager's note); staff resubmit with fresh
+-- photos -> Awaiting Review again. Only the Manager review sets Completed.
+
+-- 1. Allow the new statuses. The original check was declared inline on
+--    the create table above, so Postgres auto-named it; rather than
+--    guessing the name, drop every check constraint on task_occurrences
+--    that mentions "status", then add one with a known name.
+do $$
+declare c record;
+begin
+  for c in
+    select conname from pg_constraint
+    where conrelid = 'public.task_occurrences'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%status%'
+  loop
+    execute format('alter table public.task_occurrences drop constraint %I', c.conname);
+  end loop;
+  alter table public.task_occurrences add constraint task_occurrences_status_check
+    check (status in ('Pending', 'In Progress', 'Awaiting Review', 'Rejected', 'Completed'));
+end $$;
+
+alter table task_occurrences add column if not exists submitted_at timestamptz;      -- when staff submitted for review
+alter table task_occurrences add column if not exists reviewed_at timestamptz;       -- last approve/reject
+alter table task_occurrences add column if not exists reviewed_by uuid references users (id) on delete set null;
+alter table task_occurrences add column if not exists review_note text;              -- Manager's rejection note
+alter table task_occurrences add column if not exists rejection_count int not null default 0;
+alter table task_occurrences add column if not exists photos_purged_at timestamptz;  -- set by the 6-month retention purge
+
+-- 2. Photos attached to an occurrence. The image files themselves live in
+--    the private "task-photos" Storage bucket at
+--    {occurrence_id}/{uuid}.jpg; this table just records their paths.
+--    IMPORTANT: always delete the files through the Storage API
+--    (supabase.storage.from('task-photos').remove([...])) before deleting
+--    these rows — deleting rows (or storage.objects) via SQL leaves the
+--    actual files orphaned in Storage.
+create table if not exists task_photos (
+  id uuid primary key default gen_random_uuid(),
+  occurrence_id uuid not null references task_occurrences (id) on delete cascade,
+  storage_path text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists task_photos_occurrence_idx on task_photos (occurrence_id);
+create index if not exists task_photos_created_at_idx on task_photos (created_at);
+
+-- Same deliberately permissive policy as the other tables — MUST be
+-- tightened (auth.uid()-based) when real Supabase Auth is added.
+alter table task_photos enable row level security;
+drop policy if exists "anon full access" on task_photos;
+create policy "anon full access" on task_photos for all using (true) with check (true);
+
+-- 3. Private Storage bucket (not public: photos are only viewable via
+--    short-lived signed URLs). 5 MB per file; the app compresses to
+--    ~150-400 KB JPEG before upload anyway.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('task-photos', 'task-photos', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update set
+  public = false,
+  file_size_limit = 5242880,
+  allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp'];
+-- (do update, not do nothing: an older public bucket may already exist and must be forced private.)
+
+-- TEMPORARY permissive Storage policies, scoped to this bucket only, so
+-- the anon/publishable key can upload, create signed URLs, and delete.
+-- Replace with auth.uid()-based policies when Auth is added.
+drop policy if exists "anon full access task-photos" on storage.objects;
+drop policy if exists "task-photos anon select" on storage.objects;
+create policy "task-photos anon select" on storage.objects
+  for select using (bucket_id = 'task-photos');
+
+drop policy if exists "task-photos anon insert" on storage.objects;
+create policy "task-photos anon insert" on storage.objects
+  for insert with check (bucket_id = 'task-photos');
+
+drop policy if exists "task-photos anon delete" on storage.objects;
+create policy "task-photos anon delete" on storage.objects
+  for delete using (bucket_id = 'task-photos');
 
 -- ---------------------------------------------------------------------
 -- Force PostgREST to pick up the schema changes above immediately,

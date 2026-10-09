@@ -190,7 +190,7 @@ export default function MaintenanceTasksPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         title="Delete task?"
-        message={`Are you sure you want to delete "${deleteTarget?.task_name}"? This also removes its scheduled occurrences. There's no undo — use Disable instead if you might need it again.`}
+        message={`Are you sure you want to delete "${deleteTarget?.task_name}"? This also removes its scheduled occurrences and photos. There's no undo — use Disable instead if you might need it again.`}
         confirmLabel="Delete"
         danger
         onConfirm={confirmDelete}

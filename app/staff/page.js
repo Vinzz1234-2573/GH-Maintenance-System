@@ -1,19 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { fetchTasks, fetchOccurrences, ensureOccurrences, updateOccurrence, STATUSES } from "../../lib/data";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  fetchTasks, fetchOccurrences, ensureOccurrences, saveProgress, submitForReview, STAFF_STATUSES,
+} from "../../lib/data";
+import { compressImage, MIN_PHOTOS, MAX_PHOTOS } from "../../lib/photos";
+import PhotoThumbs from "../../components/PhotoThumbs";
 import { getSession } from "../../lib/session";
 import { useToast } from "../../components/useToast";
 import { StatusBadge } from "../../components/Badges";
-import { relativeDateLabel, formatHHMM, todayStr } from "../../lib/dates";
+import { relativeDateLabel, formatHHMM, formatDateTime, todayStr, addDays } from "../../lib/dates";
 import { occurrenceDisplayStatus, friendlyPattern, taskEmoji, FREQUENCIES } from "../../lib/schedule";
 
 const UPCOMING_DAYS = 13;
+const HISTORY_DAYS = 30; // how far back staff can see overdue work and completions
+// Statuses a staff member can still act on (Awaiting Review and Completed are read-only).
+const STAFF_EDITABLE = ["Pending", "In Progress", "Rejected"];
 const TABS = [
   ["today", "📋 Today's Tasks"], ["pending", "⏳ Pending"],
   ["upcoming", "📅 Upcoming"], ["completed", "✅ Completed"],
 ];
-const FREQ_FILTERS = [["all", "All"], ...FREQUENCIES.filter((f) => f.value !== "once").map((f) => [f.value, f.label])];
+// "All" first, then every frequency in the order Daily/Weekly/Monthly/Once.
+const FREQ_FILTERS = [
+  ["all", "All"],
+  ...FREQUENCIES.filter((f) => f.value !== "once").map((f) => [f.value, f.label]),
+  ["once", "Once"],
+];
 
 const FREQ_BADGE_STYLE = {
   daily: { background: "var(--primary-light)", color: "var(--primary)" },
@@ -44,18 +56,20 @@ export default function StaffDashboard() {
 
   async function load() {
     setLoading(true);
+    setFreqFilter("all"); // never carry a stale filter across loads
     const today = todayStr();
-    const to = new Date();
-    to.setDate(to.getDate() + UPCOMING_DAYS);
-    const toStr = to.toISOString().slice(0, 10);
+    const from = addDays(today, -HISTORY_DAYS);
+    const to = addDays(today, UPCOMING_DAYS);
 
     const t = await fetchTasks();
     const myTasks = (t.data || []).filter((task) => task.assigned_to === user.id && task.enabled);
     setTasks(myTasks);
 
+    // Read existing rows (incl. overdue + recent history) for the wide
+    // window, but only generate new rows from today forward.
     const taskIds = myTasks.map((task) => task.id);
-    const existing = taskIds.length ? await fetchOccurrences({ from: today, to: toStr, taskIds }) : { data: [] };
-    const ensured = await ensureOccurrences(myTasks, existing.data || [], today, toStr);
+    const existing = taskIds.length ? await fetchOccurrences({ from, to, taskIds }) : { data: [] };
+    const ensured = await ensureOccurrences(myTasks, existing.data || [], today, to);
     setOccurrences(ensured.data || []);
     setLoading(false);
   }
@@ -76,17 +90,25 @@ export default function StaffDashboard() {
   const upcomingTasks = occurrences
     .filter((o) => o.due_date >= today && matchesFreq(o))
     .sort((a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0));
-  const completedTasks = occurrences.filter((o) => o.due_date === today && o.status === "Completed" && matchesFreq(o));
+  const completedTasks = occurrences
+    .filter((o) => o.status === "Completed" && matchesFreq(o))
+    .sort((a, b) => (a.due_date > b.due_date ? -1 : a.due_date < b.due_date ? 1 : 0));
 
-  async function handleSaveUpdate(occurrence, { status, remarks }) {
-    const { error, data } = await updateOccurrence(occurrence.id, { status, remarks });
-    if (error) {
-      showToast(error.message);
-      return;
+  // Returns an error message (kept in the modal, e.g. to offer Retry) or null.
+  async function handleSaveUpdate(occurrence, { action, status, remarks, blobs }) {
+    let res;
+    try {
+      res = action === "submit"
+        ? await submitForReview(occurrence.id, { remarks, blobs })
+        : await saveProgress(occurrence.id, { status, remarks });
+    } catch (err) {
+      return err.message;
     }
-    setOccurrences((prev) => prev.map((o) => (o.id === occurrence.id ? data : o)));
-    showToast("Task updated.");
+    if (res.error) return res.error.message;
+    setOccurrences((prev) => prev.map((o) => (o.id === occurrence.id ? res.data : o)));
+    showToast(action === "submit" ? "Submitted for review." : "Task updated.");
     setUpdating(null);
+    return null;
   }
 
   if (!user) return <div className="loading">Checking access...</div>;
@@ -138,7 +160,7 @@ export default function StaffDashboard() {
             <div className="note">
               {tab === "today" && "Nothing left for today — nice work."}
               {tab === "pending" && "Nothing pending. You're all caught up."}
-              {tab === "completed" && "Nothing completed yet today."}
+              {tab === "completed" && `Nothing completed in the last ${HISTORY_DAYS} days.`}
             </div>
           ) : (
             activeList.map((o) => {
@@ -197,9 +219,35 @@ function TaskCard({ occurrence: o, task, userName, onUpdate }) {
       {task.due_time && <div className="note" style={{ margin: "2px 0" }}>⏰ Due: {formatHHMM(task.due_time)}</div>}
       <div className="note" style={{ margin: "2px 0 10px" }}>👤 Assigned to: {userName}</div>
 
+      {o.status === "Completed" && o.completed_at && (
+        <div className="note" style={{ margin: "-6px 0 10px" }}>✅ Completed {formatDateTime(o.completed_at)}</div>
+      )}
+      {o.status === "Awaiting Review" && o.submitted_at && (
+        <div className="note" style={{ margin: "-6px 0 10px" }}>📤 Submitted {formatDateTime(o.submitted_at)} — waiting for the Manager to review</div>
+      )}
+
+      {o.status === "Rejected" && <ReviewNote occurrence={o} />}
+
       {o.remarks && <div className="note" style={{ margin: "0 0 10px" }}><b>Remarks:</b> {o.remarks}</div>}
 
-      <button className="btn btn-primary btn-block" onClick={onUpdate}>Update Task</button>
+      {(o.status === "Awaiting Review" || o.status === "Completed") && <PhotoThumbs photos={o.task_photos} />}
+
+      {STAFF_EDITABLE.includes(o.status) && (
+        <button className="btn btn-primary btn-block" onClick={onUpdate}>
+          {o.status === "Rejected" ? "Fix & Resubmit" : "Update Task"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// The Manager's rejection note, shown prominently on Needs Correction work.
+function ReviewNote({ occurrence: o }) {
+  return (
+    <div className="review-note">
+      <b>⚠️ Needs correction{o.rejection_count > 1 ? ` (returned ${o.rejection_count}×)` : ""}:</b>{" "}
+      {o.review_note || "The Manager asked for this task to be redone."}
+      <div style={{ fontSize: 12, marginTop: 4 }}>Fix it, take new photos, and submit again.</div>
     </div>
   );
 }
@@ -230,47 +278,160 @@ function UpcomingList({ list, taskById }) {
   );
 }
 
-function UpdateTaskModal({ occurrence, task, onCancel, onSave }) {
-  const [status, setStatus] = useState(occurrence.status);
-  const [remarks, setRemarks] = useState(occurrence.remarks || "");
-  const [saving, setSaving] = useState(false);
+function formatKB(bytes) {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+}
 
-  async function handleSave() {
-    setSaving(true);
-    await onSave({ status, remarks });
-    setSaving(false);
+let photoKey = 0;
+
+// Staff can: change status between Pending / In Progress, add remarks, and
+// Submit for Review with 1-5 photos. Only the Manager can complete a task.
+function UpdateTaskModal({ occurrence, task, onCancel, onSave }) {
+  const isRejected = occurrence.status === "Rejected";
+  const [status, setStatus] = useState(STAFF_STATUSES.includes(occurrence.status) ? occurrence.status : "Pending");
+  const [remarks, setRemarks] = useState(occurrence.remarks || "");
+  // [{ key, name, state: "compressing" | "ready", blob, url, size }]
+  const [photos, setPhotos] = useState([]);
+  const [photoError, setPhotoError] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [busy, setBusy] = useState(""); // "", "saving", "submitting"
+  const urlsRef = useRef([]);
+
+  // Free preview object URLs when the modal closes.
+  useEffect(() => () => urlsRef.current.forEach((u) => URL.revokeObjectURL(u)), []);
+
+  const readyPhotos = photos.filter((p) => p.state === "ready");
+  const compressing = photos.some((p) => p.state === "compressing");
+  const canSubmit = readyPhotos.length >= MIN_PHOTOS && !compressing && !busy;
+
+  async function handleFiles(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = ""; // allow picking the same file again later
+    if (!files.length) return;
+    setPhotoError("");
+    setSubmitError("");
+
+    const room = MAX_PHOTOS - photos.length;
+    if (room <= 0) {
+      setPhotoError(`You can attach at most ${MAX_PHOTOS} photos. Remove one to add another.`);
+      return;
+    }
+    if (files.length > room) {
+      setPhotoError(`Only ${MAX_PHOTOS} photos allowed — added the first ${room}, skipped ${files.length - room}.`);
+    }
+    const batch = files.slice(0, room).map((file) => ({ key: ++photoKey, name: file.name, state: "compressing", file }));
+    setPhotos((prev) => [...prev, ...batch]);
+
+    for (const item of batch) {
+      try {
+        const blob = await compressImage(item.file);
+        const url = URL.createObjectURL(blob);
+        urlsRef.current.push(url);
+        setPhotos((prev) => prev.map((p) => (p.key === item.key ? { key: p.key, name: p.name, state: "ready", blob, url, size: blob.size } : p)));
+      } catch (err) {
+        setPhotos((prev) => prev.filter((p) => p.key !== item.key));
+        setPhotoError(`${item.name}: ${err.message}`);
+      }
+    }
+  }
+
+  function removePhoto(key) {
+    setPhotos((prev) => prev.filter((p) => p.key !== key));
+    setPhotoError("");
+  }
+
+  async function run(action) {
+    setBusy(action === "submit" ? "submitting" : "saving");
+    setSubmitError("");
+    const err = await onSave(
+      action === "submit"
+        ? { action, remarks, blobs: readyPhotos.map((p) => p.blob) }
+        : { action, remarks, status: isRejected ? undefined : status },
+    );
+    if (err) setSubmitError(err);
+    setBusy("");
   }
 
   return (
-    <div className="dialog-backdrop" onClick={onCancel}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
+    <div className="dialog-backdrop" onClick={busy ? undefined : onCancel}>
+      <div className="dialog" style={{ maxHeight: "92vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <h3>{taskEmoji(task?.task_name)} {task?.task_name}</h3>
 
-        <button
-          type="button"
-          className="btn btn-secondary btn-block"
-          style={{ marginBottom: 14, color: status === "Completed" ? "#fff" : undefined, background: status === "Completed" ? "var(--success)" : undefined }}
-          onClick={() => setStatus("Completed")}
-        >
-          ✅ Mark as Completed
-        </button>
+        {isRejected && <ReviewNote occurrence={occurrence} />}
 
-        <div className="field" style={{ marginBottom: 10 }}>
-          <label>Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
+        {!isRejected && (
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label>Status</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} disabled={!!busy}>
+              {STAFF_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        )}
 
-        <div className="field" style={{ marginBottom: 16 }}>
+        <div className="field" style={{ marginBottom: 12 }}>
           <label>Remarks</label>
-          <textarea rows={3} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Optional notes" />
+          <textarea rows={3} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Optional notes" disabled={!!busy} />
         </div>
 
-        <div className="dialog-actions">
-          <button className="btn btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save Update"}
+        <div className="field" style={{ marginBottom: 6 }}>
+          <label>Photo evidence ({photos.length}/{MAX_PHOTOS})</label>
+          <div className="note" style={{ margin: "0 0 6px" }}>
+            {isRejected ? "Take new photos of the corrected work." : `Add ${MIN_PHOTOS}–${MAX_PHOTOS} photos to submit for review.`}
+          </div>
+          <div className="photo-grid">
+            {photos.map((p) => (
+              <div key={p.key} className="photo-thumb" style={{ cursor: "default" }}>
+                {p.state === "ready" ? (
+                  <>
+                    <img src={p.url} alt={p.name} />
+                    <span className="photo-thumb-caption">{formatKB(p.size)}</span>
+                  </>
+                ) : (
+                  <span className="photo-thumb-caption" style={{ top: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    compressing…
+                  </span>
+                )}
+                {!busy && (
+                  <button type="button" className="photo-thumb-remove" onClick={() => removePhoto(p.key)} aria-label={`Remove ${p.name}`}>
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {photos.length < MAX_PHOTOS && !busy && (
+            <label className="btn btn-secondary btn-block" style={{ textTransform: "none", letterSpacing: 0, fontSize: 13.5, cursor: "pointer" }}>
+              📷 Add photos
+              {/* No `capture` attribute, so phones offer both camera and gallery. */}
+              <input type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: "none" }} />
+            </label>
+          )}
+          {photoError && <div className="note" style={{ color: "var(--danger)", margin: "6px 0 0" }}>{photoError}</div>}
+        </div>
+
+        {submitError && (
+          <div className="review-note" style={{ marginTop: 10, background: "var(--danger-bg)", borderColor: "#f0b9b9", color: "var(--danger)" }}>
+            {submitError}
+            {readyPhotos.length >= MIN_PHOTOS && (
+              <div style={{ marginTop: 6 }}>
+                <button className="btn btn-sm btn-secondary" onClick={() => run("submit")} disabled={!canSubmit}>↻ Retry submit</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="dialog-actions" style={{ marginTop: 14 }}>
+          <button className="btn btn-secondary" onClick={onCancel} disabled={!!busy}>Cancel</button>
+          <button className="btn btn-secondary" onClick={() => run("save")} disabled={!!busy || compressing}>
+            {busy === "saving" ? "Saving..." : "Save Progress"}
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => run("submit")}
+            disabled={!canSubmit}
+            title={readyPhotos.length < MIN_PHOTOS ? "Attach at least one photo first" : undefined}
+          >
+            {busy === "submitting" ? "Uploading..." : "Submit for Review"}
           </button>
         </div>
       </div>
