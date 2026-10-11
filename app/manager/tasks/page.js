@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { fetchTasks, fetchEquipment, fetchStaffUsers, updateTask, setTaskEnabled, deleteTask } from "../../../lib/data";
+import { fetchTasks, fetchEquipment, fetchStaffUsers, fetchUsers, updateTask, setTaskEnabled, deleteTask } from "../../../lib/data";
 import { useToast } from "../../../components/useToast";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 import TaskForm from "../../../components/TaskForm";
@@ -14,7 +14,8 @@ export default function MaintenanceTasksPage() {
   const { showToast, ToastHost } = useToast();
   const [tasks, setTasks] = useState([]);
   const [equipment, setEquipment] = useState([]);
-  const [staff, setStaff] = useState([]);
+  const [staff, setStaff] = useState([]); // staff who can log in — assignable
+  const [users, setUsers] = useState([]); // every users row — for names and the filter
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [editing, setEditing] = useState(null);
@@ -24,10 +25,11 @@ export default function MaintenanceTasksPage() {
 
   async function load() {
     setLoading(true);
-    const [t, e, s] = await Promise.all([fetchTasks(), fetchEquipment(), fetchStaffUsers()]);
+    const [t, e, s, u] = await Promise.all([fetchTasks(), fetchEquipment(), fetchStaffUsers(), fetchUsers()]);
     setTasks(t.data || []);
     setEquipment(e.data || []);
     setStaff(s.data || []);
+    setUsers(u.data || []);
     setLoading(false);
   }
 
@@ -36,11 +38,13 @@ export default function MaintenanceTasksPage() {
     for (const e of equipment) map[e.id] = e;
     return map;
   }, [equipment]);
-  const staffById = useMemo(() => {
+  // Names come from every users row, so tasks still assigned to an old
+  // login-less profile keep showing a name.
+  const usersById = useMemo(() => {
     const map = {};
-    for (const s of staff) map[s.id] = s;
+    for (const u of users) map[u.id] = u;
     return map;
-  }, [staff]);
+  }, [users]);
 
   const filtered = tasks.filter((t) => {
     if (filters.status !== "all" && (filters.status === "enabled") !== t.enabled) return false;
@@ -105,7 +109,7 @@ export default function MaintenanceTasksPage() {
             <label>Assigned Staff</label>
             <select value={filters.assignedTo} onChange={(e) => setFilters((f) => ({ ...f, assignedTo: e.target.value }))}>
               <option value="all">All</option>
-              {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {users.filter((u) => u.role === "staff").map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </div>
           <div className="field">
@@ -146,7 +150,7 @@ export default function MaintenanceTasksPage() {
                     <td data-label="Task"><b>{t.task_name}</b></td>
                     <td data-label="Equipment">{equipmentById[t.equipment_id]?.equipment_name || "—"}</td>
                     <td data-label="Frequency">{scheduleSummary(t)}</td>
-                    <td data-label="Assigned Staff">{staffById[t.assigned_to]?.name || "Unassigned"}</td>
+                    <td data-label="Assigned Staff">{usersById[t.assigned_to]?.name || "Unassigned"}</td>
                     <td data-label="Status">
                       <span className={"badge " + (t.enabled ? "badge-completed" : "badge-disabled")}>
                         {t.enabled ? "Enabled" : "Disabled"}
@@ -179,6 +183,7 @@ export default function MaintenanceTasksPage() {
               initial={editing}
               equipmentList={equipment}
               staffList={staff}
+              usersList={users}
               onCancel={() => setEditing(null)}
               onSubmit={handleSaveEdit}
               submitLabel="Save Changes"

@@ -9,8 +9,20 @@ const BLANK = {
   frequency: "once", weekly_days: [], monthly_day: 1, start_date: "", due_time: "", enabled: true,
 };
 
-export default function TaskForm({ initial, equipmentList, staffList, onSubmit, onCancel, submitLabel = "Save Task" }) {
+// "Zul (zul@gentlehill.my)". A row with no login (old name-only profile) is
+// flagged, because nobody can sign in as them to see the task.
+function staffLabel(s) {
+  return s.auth_user_id ? `${s.name} (${s.email})` : `${s.name} (no login yet)`;
+}
+
+// staffList: staff who can log in — the only people a task can be newly
+// assigned to. usersList (optional): every users row, so editing a task that
+// is still assigned to a login-less profile can show who that is.
+export default function TaskForm({ initial, equipmentList, staffList, usersList = [], onSubmit, onCancel, submitLabel = "Save Task" }) {
   const [values, setValues] = useState({ ...BLANK, ...initial, start_date: initial?.start_date || todayStr() });
+  const currentAssignee = staffList.some((s) => s.id === initial?.assigned_to)
+    ? null
+    : usersList.find((u) => u.id === initial?.assigned_to);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const set = (field) => (e) => setValues((v) => ({ ...v, [field]: e.target.value }));
@@ -70,8 +82,14 @@ export default function TaskForm({ initial, equipmentList, staffList, onSubmit, 
         <label>Assign To</label>
         <select value={values.assigned_to} onChange={set("assigned_to")}>
           <option value="">Select staff...</option>
-          {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {currentAssignee && <option value={currentAssignee.id}>{staffLabel(currentAssignee)}</option>}
+          {staffList.map((s) => <option key={s.id} value={s.id}>{staffLabel(s)}</option>)}
         </select>
+        {currentAssignee && values.assigned_to === currentAssignee.id && (
+          <div className="note" style={{ margin: "4px 0 0" }}>
+            {currentAssignee.name} can't log in yet, so they won't see this task. Pick someone with a login to reassign it.
+          </div>
+        )}
       </div>
 
       <div className="field" style={{ marginBottom: 10 }}>

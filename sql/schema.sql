@@ -2,6 +2,13 @@
 -- Run this in the Supabase SQL Editor (Project -> SQL Editor -> New query).
 -- Safe to re-run: every create/insert is idempotent.
 --
+-- !! AFTER sql/auth/02-lockdown.sql HAS BEEN RUN on a project, do NOT re-run
+-- !! this file on its own: it re-creates the permissive "anon full access"
+-- !! policies below, which would give every logged-in user full access again.
+-- !! If you must, run sql/auth/02-lockdown.sql again straight afterwards.
+-- !! (Login/roles: run sql/auth/01-additive.sql, then 02-lockdown.sql, after
+-- !! this file — see the README, "Login, roles & access control".)
+--
 -- >>> UPDATED for photo evidence + Manager review: re-run THIS WHOLE FILE
 -- >>> in the Supabase SQL Editor. It adds the new statuses/columns, the
 -- >>> task_photos table and the private "task-photos" Storage bucket

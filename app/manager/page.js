@@ -94,11 +94,8 @@ export default function ManagerDashboard() {
     for (const e of equipment) map[e.id] = e;
     return map;
   }, [equipment]);
-  const staffById = useMemo(() => {
-    const map = {};
-    for (const s of staff) map[s.id] = s;
-    return map;
-  }, [staff]);
+  // Name lookups use EVERY users row (not just staff who can log in), so a task
+  // still assigned to an old name-only profile keeps showing its name.
   const usersById = useMemo(() => {
     const map = {};
     for (const u of users) map[u.id] = u;
@@ -129,7 +126,7 @@ export default function ManagerDashboard() {
 
   // Manager-only: approve, or reject with a note. Returns an error message or null.
   async function handleReview(occurrence, decision, note) {
-    const reviewerId = getSession()?.id;
+    const reviewerId = (await getSession())?.id;
     let res;
     try {
       res = await reviewTask(occurrence.id, { decision, note, reviewerId });
@@ -180,7 +177,7 @@ export default function ManagerDashboard() {
       <tr key={o.id}>
         <td data-label="Equipment">{equipmentById[task.equipment_id]?.equipment_name || "—"}</td>
         <td data-label="Task">{task.task_name}</td>
-        <td data-label="Assigned Staff">{staffById[task.assigned_to]?.name || "Unassigned"}</td>
+        <td data-label="Assigned Staff">{usersById[task.assigned_to]?.name || "Unassigned"}</td>
         <td data-label="Due Date">{formatDate(o.due_date)}</td>
         <td data-label="Frequency">{scheduleSummary(task)}</td>
         <td data-label="Status"><StatusBadge status={occurrenceDisplayStatus(o)} /></td>
@@ -339,7 +336,7 @@ export default function ManagerDashboard() {
                       <span>
                         <b>{task?.task_name || "Deleted task"}</b>
                         {task && ` — ${equipmentById[task.equipment_id]?.equipment_name || "No equipment"}`}
-                        {" · "}{staffById[task?.assigned_to]?.name || "Unassigned"}
+                        {" · "}{usersById[task?.assigned_to]?.name || "Unassigned"}
                       </span>
                       <span className="note" style={{ margin: 0 }}>
                         Due {formatDate(o.due_date)} · Submitted {formatDateTime(o.submitted_at)}
@@ -372,7 +369,7 @@ export default function ManagerDashboard() {
                 if (!task) return null;
                 return (
                   <div key={o.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid rgba(0,0,0,0.06)", fontSize: 13.5 }}>
-                    <span><b>{task.task_name}</b> — {staffById[task.assigned_to]?.name || "Unassigned"} · Due {formatDate(o.due_date)}</span>
+                    <span><b>{task.task_name}</b> — {usersById[task.assigned_to]?.name || "Unassigned"} · Due {formatDate(o.due_date)}</span>
                     <button className="btn btn-secondary btn-sm" onClick={() => setViewing(o)}>View</button>
                   </div>
                 );
@@ -418,7 +415,7 @@ export default function ManagerDashboard() {
                       <tr key={t.id}>
                         <td data-label="Task">{t.task_name}</td>
                         <td data-label="Equipment">{equipmentById[t.equipment_id]?.equipment_name || "—"}</td>
-                        <td data-label="Assigned Staff">{staffById[t.assigned_to]?.name || "Unassigned"}</td>
+                        <td data-label="Assigned Staff">{usersById[t.assigned_to]?.name || "Unassigned"}</td>
                         <td data-label="Actions">
                           <div className="table-actions">
                             <button className="btn btn-ghost btn-sm" onClick={() => toggleEnabled(t)}>Enable</button>
@@ -443,6 +440,7 @@ export default function ManagerDashboard() {
               initial={editing}
               equipmentList={equipment}
               staffList={staff}
+              usersList={users}
               onCancel={() => setEditing(null)}
               onSubmit={handleSaveEdit}
               submitLabel="Save Changes"
@@ -455,7 +453,7 @@ export default function ManagerDashboard() {
         <OccurrenceDetailDialog
           occurrence={viewing}
           task={taskById[viewing.task_id]}
-          staffName={staffById[taskById[viewing.task_id]?.assigned_to]?.name}
+          staffName={usersById[taskById[viewing.task_id]?.assigned_to]?.name}
           reviewerName={usersById[viewing.reviewed_by]?.name}
           onApprove={() => approve(viewing)}
           onReject={() => setRejectTarget(viewing)}

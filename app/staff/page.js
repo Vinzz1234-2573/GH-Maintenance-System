@@ -46,7 +46,9 @@ export default function StaffDashboard() {
   const [updating, setUpdating] = useState(null); // the occurrence being updated
 
   useEffect(() => {
-    setUser(getSession());
+    let active = true;
+    getSession().then((u) => { if (active) setUser(u); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {

@@ -1,31 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { getSession, clearSession } from "../../lib/session";
+import { useAuthGuard } from "../../components/useAuthGuard";
 
 export default function StaffLayout({ children }) {
-  const [checked, setChecked] = useState(false);
-  const [user, setUser] = useState(null);
-  const router = useRouter();
+  const { user, gate, logout } = useAuthGuard("staff");
 
-  useEffect(() => {
-    const session = getSession();
-    if (!session || session.role !== "staff") {
-      router.replace("/login/staff");
-      return;
-    }
-    setUser(session);
-    setChecked(true);
-  }, [router]);
-
-  function handleLogout() {
-    clearSession();
-    router.push("/");
-  }
-
-  if (!checked) return <div className="loading">Checking access...</div>;
+  if (gate) return gate;
 
   return (
     <div>
@@ -40,7 +21,7 @@ export default function StaffLayout({ children }) {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Link href="/" className="btn btn-secondary btn-sm" style={{ textDecoration: "none" }}>Back to Website</Link>
-            <button className="btn btn-secondary btn-sm" onClick={handleLogout}>Logout</button>
+            <button className="btn btn-secondary btn-sm" onClick={logout}>Logout</button>
           </div>
         </div>
       </div>

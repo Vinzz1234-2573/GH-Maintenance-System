@@ -1,7 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import LoginForm from "../../../components/LoginForm";
-
-export default function StaffLoginPage() {
-  return <LoginForm role="staff" dashboardHref="/staff" title="Staff Login" />;
+// Old name-only login URL — keep bookmarks working.
+export default function StaffLoginRedirect() {
+  redirect("/login");
 }
