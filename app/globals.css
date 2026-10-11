@@ -252,3 +252,18 @@ table.data-table tr:hover td { background: #fafbfd; }
 .empty { text-align: center; padding: 50px 20px; color: var(--muted); font-size: 14px; }
 .loading { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
 .error-text { color: var(--danger); font-size: 13px; }
+
+/* ---------- show/hide password (login + signup) ---------- */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 44px; }
+.pw-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0;
+  background: none; border: 0; border-radius: 6px;
+  color: var(--muted); cursor: pointer;
+}
+.pw-toggle:hover { color: var(--ink); background: var(--info-bg); }
+.pw-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+/* Edge adds its own reveal/clear icon to password boxes; ours replaces it. */
+input[type=password]::-ms-reveal, input[type=password]::-ms-clear { display: none; }

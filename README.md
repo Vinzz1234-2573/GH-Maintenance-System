@@ -432,7 +432,7 @@ clear error if anything is wrong (not signed up yet, already linked, ...).
 
 Only addresses on these domains can sign up (case-insensitive, exact match —
 `x@mail.gentlehill.my` would need its own entry). The default is
-`gentlehill.my`. To change it, edit the array in
+`gentlehill.my`, `amitabhafoundation.my` and `gamutpro.my`. To change it, edit the array in
 `public.allowed_email_domains()` in `sql/auth/01-additive.sql` and re-run
 that one statement; an empty array (`array[]::text[]`) turns the
 restriction off. A rejected sign-up shows "Sign-ups are limited to company

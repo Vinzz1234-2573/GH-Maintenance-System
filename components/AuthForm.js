@@ -10,6 +10,18 @@ import { validateLogin, validateSignup, friendlyAuthError } from "../lib/authHel
 const PROFILE_MISSING =
   "Your login worked, but no profile is linked to it, so you've been signed out. Please contact your administrator.";
 
+// Eye icon for the show/hide password button (eye = "click to show",
+// eye with a slash = "click to hide").
+function EyeIcon({ off }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+      <circle cx="12" cy="12" r="3" />
+      {off && <line x1="3" y1="3" x2="21" y2="21" />}
+    </svg>
+  );
+}
+
 // One form for both pages: /login (mode="login") and /signup (mode="signup").
 // After a successful login/signup the person is sent to the dashboard for the
 // role stored in the database (manager -> /manager, staff -> /staff).
@@ -18,6 +30,7 @@ export default function AuthForm({ mode }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // eye button: show the typed password(s)
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
@@ -120,24 +133,44 @@ export default function AuthForm({ mode }) {
             <label htmlFor="auth-email">Email</label>
             <input
               id="auth-email" type="email" autoFocus autoComplete="email" inputMode="email"
-              value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@gentlehill.my"
+              value={email} onChange={(e) => setEmail(e.target.value)}
             />
           </div>
           <div className="field" style={{ marginBottom: 12 }}>
             <label htmlFor="auth-password">Password</label>
-            <input
-              id="auth-password" type="password" autoComplete={isSignup ? "new-password" : "current-password"}
-              value={password} onChange={(e) => setPassword(e.target.value)}
-              placeholder={isSignup ? "At least 8 characters" : "Password"}
-            />
+            <div className="pw-wrap">
+              <input
+                id="auth-password" type={showPassword ? "text" : "password"} autoComplete={isSignup ? "new-password" : "current-password"}
+                autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder={isSignup ? "At least 8 characters" : "Password"}
+              />
+              <button
+                type="button" className="pw-toggle" onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                <EyeIcon off={showPassword} />
+              </button>
+            </div>
           </div>
           {isSignup && (
             <div className="field" style={{ marginBottom: 12 }}>
               <label htmlFor="auth-confirm">Confirm password</label>
-              <input
-                id="auth-confirm" type="password" autoComplete="new-password"
-                value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Type it again"
-              />
+              <div className="pw-wrap">
+                <input
+                  id="auth-confirm" type={showPassword ? "text" : "password"} autoComplete="new-password"
+                  autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                  value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Type it again"
+                />
+                <button
+                  type="button" className="pw-toggle" onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  <EyeIcon off={showPassword} />
+                </button>
+              </div>
             </div>
           )}
           {error && <div className="error-text" style={{ marginBottom: 10 }} role="alert">{error}</div>}

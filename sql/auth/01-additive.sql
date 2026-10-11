@@ -41,7 +41,7 @@ create unique index if not exists users_email_lower_key
 -- ---------------------------------------------------------------------
 -- HOW TO EDIT: change the array below and re-run just this statement
 -- (create or replace). Examples:
---   array['gentlehill.my']                   -- default: company only
+--   array['gentlehill.my', 'amitabhafoundation.my', 'gamutpro.my']  -- current default
 --   array['gentlehill.my', 'gentlehill.com'] -- several domains
 --   array[]::text[]                          -- empty = NO restriction (anyone can sign up)
 -- Matching is case-insensitive and exact: "x@mail.gentlehill.my" does NOT
@@ -52,7 +52,7 @@ language sql
 immutable
 set search_path = ''
 as $$
-  select array['gentlehill.my']::text[]
+  select array['gentlehill.my', 'amitabhafoundation.my', 'gamutpro.my']::text[]
 $$;
 
 -- BEFORE INSERT on auth.users: reject signups from other domains. The
