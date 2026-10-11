@@ -42,7 +42,7 @@ label {
   margin-bottom: 5px;
 }
 input[type=text], input[type=date], input[type=time], input[type=password],
-input[type=number], input[type=search], select, textarea {
+input[type=email], input[type=number], input[type=search], select, textarea {
   width: 100%;
   border: 1px solid var(--border);
   background: #fff;
@@ -118,6 +118,8 @@ button { font-family: inherit; }
 .badge-inprogress { background: var(--warning-bg); color: var(--warning); }
 .badge-overdue { background: var(--danger-bg); color: var(--danger); }
 .badge-disabled { background: #eef1f4; color: var(--muted); }
+.badge-review { background: #f1e8fb; color: #7c3aed; }
+.badge-correction { background: #fff0e0; color: #c2410c; }
 .badge-priority-low { background: var(--info-bg); color: var(--muted); }
 .badge-priority-normal { background: var(--primary-light); color: var(--primary); }
 .badge-priority-high { background: var(--warning-bg); color: var(--warning); }
@@ -154,6 +156,39 @@ button { font-family: inherit; }
 .dialog h3 { font-size: 16px; margin-bottom: 8px; }
 .dialog p { font-size: 13.5px; color: var(--muted); line-height: 1.5; margin: 0 0 18px; }
 .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+
+/* ---------- photo evidence ---------- */
+.photo-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+.photo-thumb {
+  position: relative; width: 72px; height: 72px; border-radius: 6px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--info-bg); padding: 0; cursor: pointer;
+  flex: none;
+}
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-thumb-remove {
+  position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border-radius: 50%;
+  border: none; background: rgba(15,23,42,0.75); color: #fff; font-size: 13px; line-height: 22px;
+  padding: 0; cursor: pointer;
+}
+.photo-thumb-caption {
+  position: absolute; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.6); color: #fff;
+  font-size: 10px; text-align: center; padding: 1px 0;
+}
+.review-note {
+  background: #fff0e0; border: 1px solid #f5c99a; color: #9a3412; border-radius: 6px;
+  padding: 8px 10px; font-size: 13px; margin: 0 0 10px; line-height: 1.45;
+}
+.lightbox {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 400;
+  display: flex; align-items: center; justify-content: center;
+}
+.lightbox img { max-width: 92vw; max-height: 84vh; object-fit: contain; }
+.lightbox-btn {
+  position: absolute; background: rgba(255,255,255,0.15); color: #fff; border: none;
+  border-radius: 50%; width: 44px; height: 44px; font-size: 22px; cursor: pointer;
+}
+.lightbox-btn:disabled { opacity: 0.3; cursor: default; }
+.lightbox-count { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; color: #fff; font-size: 13px; }
 
 /* ---------- KPI cards ---------- */
 .kpi-grid {
@@ -217,3 +252,18 @@ table.data-table tr:hover td { background: #fafbfd; }
 .empty { text-align: center; padding: 50px 20px; color: var(--muted); font-size: 14px; }
 .loading { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
 .error-text { color: var(--danger); font-size: 13px; }
+
+/* ---------- show/hide password (login + signup) ---------- */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 44px; }
+.pw-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0;
+  background: none; border: 0; border-radius: 6px;
+  color: var(--muted); cursor: pointer;
+}
+.pw-toggle:hover { color: var(--ink); background: var(--info-bg); }
+.pw-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+/* Edge adds its own reveal/clear icon to password boxes; ours replaces it. */
+input[type=password]::-ms-reveal, input[type=password]::-ms-clear { display: none; }

@@ -29,18 +29,8 @@ export default function LandingPage() {
           </div>
 
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-            <Link href="/login/manager" className="btn btn-primary" style={{ minWidth: 190, textDecoration: "none", fontSize: 15 }}>
-              Manager Login
-            </Link>
-            <Link
-              href="/login/staff"
-              className="btn"
-              style={{
-                minWidth: 190, textDecoration: "none", fontSize: 15,
-                background: "#fff", color: "var(--primary-dark)", fontWeight: 700,
-              }}
-            >
-              Staff Login
+            <Link href="/login" className="btn btn-primary" style={{ minWidth: 190, textDecoration: "none", fontSize: 15 }}>
+              Login
             </Link>
           </div>
         </div>

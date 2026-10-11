@@ -3,6 +3,8 @@ const STATUS_CLASS = {
   "In Progress": "badge-inprogress",
   Completed: "badge-completed",
   Overdue: "badge-overdue",
+  "Awaiting Review": "badge-review",
+  "Needs Correction": "badge-correction",
   Disabled: "badge-disabled",
 };
 

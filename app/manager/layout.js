@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { getSession, clearSession } from "../../lib/session";
+import { usePathname } from "next/navigation";
+import { useAuthGuard } from "../../components/useAuthGuard";
 
 const NAV = [
   { href: "/manager", label: "Dashboard" },
@@ -15,27 +14,10 @@ const NAV = [
 const ECMS_URL = "https://ecms.gentlehill.my/login";
 
 export default function ManagerLayout({ children }) {
-  const [checked, setChecked] = useState(false);
-  const [user, setUser] = useState(null);
   const pathname = usePathname();
-  const router = useRouter();
+  const { user, gate, logout } = useAuthGuard("manager");
 
-  useEffect(() => {
-    const session = getSession();
-    if (!session || session.role !== "manager") {
-      router.replace("/login/manager");
-      return;
-    }
-    setUser(session);
-    setChecked(true);
-  }, [router]);
-
-  function handleLogout() {
-    clearSession();
-    router.push("/");
-  }
-
-  if (!checked) return <div className="loading">Checking access...</div>;
+  if (gate) return gate;
 
   return (
     <div>
@@ -53,7 +35,7 @@ export default function ManagerLayout({ children }) {
             <a href={ECMS_URL} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{ textDecoration: "none" }}>
               Login to ECMS
             </a>
-            <button className="btn btn-secondary btn-sm" onClick={handleLogout}>Logout</button>
+            <button className="btn btn-secondary btn-sm" onClick={logout}>Logout</button>
           </div>
         </div>
       </div>
