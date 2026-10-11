@@ -378,7 +378,7 @@ function UpdateTaskModal({ occurrence, task, onCancel, onSave }) {
         <div className="field" style={{ marginBottom: 6 }}>
           <label>Photo evidence ({photos.length}/{MAX_PHOTOS})</label>
           <div className="note" style={{ margin: "0 0 6px" }}>
-            {isRejected ? "Take new photos of the corrected work." : `Add ${MIN_PHOTOS}–${MAX_PHOTOS} photos to submit for review.`}
+            {isRejected ? "Take new photos of the corrected work." : `Take ${MIN_PHOTOS}–${MAX_PHOTOS} photos to submit for review.`}
           </div>
           <div className="photo-grid">
             {photos.map((p) => (
@@ -403,9 +403,12 @@ function UpdateTaskModal({ occurrence, task, onCancel, onSave }) {
           </div>
           {photos.length < MAX_PHOTOS && !busy && (
             <label className="btn btn-secondary btn-block" style={{ textTransform: "none", letterSpacing: 0, fontSize: 13.5, cursor: "pointer" }}>
-              📷 Add photos
-              {/* No `capture` attribute, so phones offer both camera and gallery. */}
-              <input type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: "none" }} />
+              📷 Take a photo
+              {/* capture="environment" asks phones to open the rear camera straight away instead of
+                  offering the photo gallery. It's a browser hint, not a hard block, and phones only
+                  take one photo per tap, so there is no `multiple`. Desktop browsers ignore it and
+                  show a normal file picker. */}
+              <input type="file" accept="image/*" capture="environment" onChange={handleFiles} style={{ display: "none" }} />
             </label>
           )}
           {photoError && <div className="note" style={{ color: "var(--danger)", margin: "6px 0 0" }}>{photoError}</div>}

@@ -73,8 +73,8 @@ export default function AuthForm({ mode }) {
           return;
         }
         if (res.needsConfirmation) {
-          // Only happens if "Confirm email" is switched ON in Supabase.
-          setNotice("Check your email to confirm your account, then come back and log in.");
+          // Only happens if "Confirm email" is switched ON in Supabase (it should be OFF: no SMTP yet).
+          setNotice("Sign up complete. Please log in.");
           setPassword("");
           setConfirm("");
           return;
