@@ -195,10 +195,12 @@ Pending ──► In Progress ──► Awaiting Review ──► Completed
 - **Staff** (`saveProgress`, `submitForReview` in `lib/data.js`): can set
   Pending / In Progress and remarks, and **Submit for Review** with
   **1–5 photos** (the button stays disabled until at least one photo is
-  attached). On phones the **Take a photo** button opens the rear camera
-  directly (`capture="environment"`, one photo per tap) instead of the
-  gallery; that is a browser hint, not a hard block, and desktop browsers
-  just show a normal file picker. Each photo is
+  attached). On phones and tablets **Take a photo** opens an in-page live
+  camera (`components/CameraCapture.js`) with its own shutter button, and
+  there is no file picker, so photos can't come from the gallery. It needs
+  HTTPS and the camera permission; if the browser can't stream a camera it
+  falls back to a file input that asks for the camera (`capture`, only a
+  hint). Desktop browsers keep a normal file picker. Each photo is
   compressed in the browser before upload (longest edge ≤ 1600 px, JPEG
   quality 0.7 — typically 150–400 KB) with EXIF orientation respected.
   Formats the browser can't decode (e.g. HEIC on some Android/desktop
