@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   fetchTasks, fetchEquipment, fetchStaffUsers, fetchUsers, fetchOccurrences, fetchAwaitingReview,
-  ensureOccurrences, reviewTask, updateTask, setTaskEnabled, deleteTask,
+  ensureOccurrences, reviewTask, updateTask, setTaskEnabled, deleteTask, clearOverdueOccurrences,
 } from "../../lib/data";
 import { maybePurgeOldPhotos } from "../../lib/retention";
 import { getSession } from "../../lib/session";
@@ -27,6 +27,22 @@ const PRESETS = [
 const OPEN_FILTER = "open";
 const FILTER_LABEL = { [OPEN_FILTER]: "Pending (all open)" };
 
+// Wording for the "Clear overdue" confirmation (one row, or the whole list).
+function clearOverdueMessage(targets, taskById) {
+  const n = targets.length;
+  const subject = n === 1
+    ? `"${taskById[targets[0].task_id]?.task_name || "This task"}" (due ${formatDate(targets[0].due_date)})`
+    : `all ${n} overdue tasks listed above`;
+  const hasOneTime = targets.some((o) => taskById[o.task_id]?.frequency === "once");
+  const oneTimeNote = !hasOneTime ? "" : n === 1
+    ? " This is a one-time task, so the task itself is deleted too."
+    : " One-time tasks in this list are deleted entirely.";
+  return (
+    `Remove ${subject} from Overdue? ${n === 1 ? "It is" : "They are"} deleted permanently, so there will be no record ` +
+    `${n === 1 ? "it was" : "they were"} missed, and no undo. Repeating tasks carry on as normal from today.` + oneTimeNote
+  );
+}
+
 export default function ManagerDashboard() {
   const { showToast, ToastHost } = useToast();
   const [tasks, setTasks] = useState([]);
@@ -45,6 +61,7 @@ export default function ManagerDashboard() {
   const [reviewQueue, setReviewQueue] = useState([]);
   const [viewing, setViewing] = useState(null); // occurrence shown in the detail dialog
   const [rejectTarget, setRejectTarget] = useState(null);
+  const [clearTarget, setClearTarget] = useState(null); // overdue occurrences about to be cleared
 
   const { from, to } = preset === "custom" ? { from: customFrom, to: customTo } : periodRange(preset);
 
@@ -167,6 +184,26 @@ export default function ManagerDashboard() {
     const { error } = await deleteTask(task.id);
     if (error) return showToast(error.message);
     showToast("Task deleted.");
+    load();
+  }
+
+  // Manager-only: delete overdue occurrences (one row, or the whole panel).
+  // The database re-checks that each is still unfinished and past due.
+  async function confirmClear() {
+    const targets = clearTarget;
+    setClearTarget(null);
+    showToast("Clearing...");
+    const { cleared, retiredTasks, error } = await clearOverdueOccurrences(targets.map((o) => o.id));
+    if (error) {
+      showToast(cleared ? `Cleared ${cleared}, then stopped: ${error.message}` : error.message);
+    } else if (cleared === 0) {
+      showToast("Nothing to clear. Those tasks had already changed, so the list was refreshed.");
+    } else {
+      showToast(
+        `Cleared ${cleared} overdue ${cleared === 1 ? "task" : "tasks"}` +
+        (retiredTasks ? ` (${retiredTasks} one-time ${retiredTasks === 1 ? "task" : "tasks"} removed).` : ".")
+      );
+    }
     load();
   }
 
@@ -363,14 +400,23 @@ export default function ManagerDashboard() {
                 <div className="section-title" style={{ margin: 0, color: "var(--danger)" }}>
                   ⚠️ Overdue ({overdueOccurrences.length})
                 </div>
+                <button
+                  className="btn btn-danger btn-sm"
+                  onClick={() => setClearTarget(overdueOccurrences.filter((o) => taskById[o.task_id]))}
+                >
+                  Clear all
+                </button>
               </div>
               {overdueOccurrences.map((o) => {
                 const task = taskById[o.task_id];
                 if (!task) return null;
                 return (
-                  <div key={o.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid rgba(0,0,0,0.06)", fontSize: 13.5 }}>
-                    <span><b>{task.task_name}</b> — {usersById[task.assigned_to]?.name || "Unassigned"} · Due {formatDate(o.due_date)}</span>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setViewing(o)}>View</button>
+                  <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0", borderTop: "1px solid rgba(0,0,0,0.06)", fontSize: 13.5 }}>
+                    <span style={{ minWidth: 0 }}><b>{task.task_name}</b> — {usersById[task.assigned_to]?.name || "Unassigned"} · Due {formatDate(o.due_date)}</span>
+                    <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setViewing(o)}>View</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--danger)" }} onClick={() => setClearTarget([o])}>Clear</button>
+                    </span>
                   </div>
                 );
               })}
@@ -481,6 +527,16 @@ export default function ManagerDashboard() {
         danger
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!clearTarget}
+        title={clearTarget?.length === 1 ? "Clear overdue task?" : `Clear ${clearTarget?.length} overdue tasks?`}
+        message={clearTarget ? clearOverdueMessage(clearTarget, taskById) : ""}
+        confirmLabel={clearTarget?.length === 1 ? "Clear" : "Clear all"}
+        danger
+        onConfirm={confirmClear}
+        onCancel={() => setClearTarget(null)}
       />
 
       <ToastHost />
